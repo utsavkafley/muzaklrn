@@ -1,4 +1,4 @@
-import { Chord, ChordQuality, NoteName, noteAt, noteIndex } from "./theory";
+import { Chord, ChordQuality, NoteName, ScaleKind, noteAt, noteIndex } from "./theory";
 
 export interface RomanChord {
   numeral: string;
@@ -12,6 +12,8 @@ export interface Progression {
   name: string;
   vibe: string;
   minor?: boolean; // key is treated as minor
+  /** Which pentatonic sits naturally over this, with the key as tonic. */
+  fits: ScaleKind[];
   chords: RomanChord[];
   tip: string;
 }
@@ -19,6 +21,7 @@ export interface Progression {
 export const PROGRESSIONS: Progression[] = [
   {
     id: "axis",
+    fits: ["majorPent"],
     name: "I – V – vi – IV",
     vibe: "The pop workhorse",
     chords: [
@@ -31,6 +34,7 @@ export const PROGRESSIONS: Progression[] = [
   },
   {
     id: "axis-min",
+    fits: ["majorPent", "minorPent"],
     name: "vi – IV – I – V",
     vibe: "Same four chords, sadder order",
     chords: [
@@ -43,6 +47,7 @@ export const PROGRESSIONS: Progression[] = [
   },
   {
     id: "50s",
+    fits: ["majorPent"],
     name: "I – vi – IV – V",
     vibe: "Doo-wop / 50s",
     chords: [
@@ -55,6 +60,7 @@ export const PROGRESSIONS: Progression[] = [
   },
   {
     id: "blues",
+    fits: ["minorPent", "majorPent"],
     name: "12-bar blues (I7 IV7 V7)",
     vibe: "Where the pentatonic lives",
     chords: [
@@ -70,6 +76,7 @@ export const PROGRESSIONS: Progression[] = [
   },
   {
     id: "andalusian",
+    fits: ["minorPent"],
     name: "i – ♭VII – ♭VI – V",
     vibe: "Andalusian / flamenco descent",
     minor: true,
@@ -83,6 +90,7 @@ export const PROGRESSIONS: Progression[] = [
   },
   {
     id: "251",
+    fits: ["majorPent"],
     name: "ii – V – I",
     vibe: "The jazz handshake",
     chords: [
@@ -94,6 +102,7 @@ export const PROGRESSIONS: Progression[] = [
   },
   {
     id: "minor-lift",
+    fits: ["minorPent"],
     name: "i – ♭VI – ♭III – ♭VII",
     vibe: "Epic minor (the other axis)",
     minor: true,
@@ -104,6 +113,79 @@ export const PROGRESSIONS: Progression[] = [
       { numeral: "♭VII", semitones: 10, quality: "maj" },
     ],
     tip: "Minor pentatonic of the key over all four. Every chord tone of ♭III and ♭VII is in your scale.",
+  },
+  {
+    id: "i-iv-v-min",
+    name: "i – iv – v",
+    vibe: "Minor blues, straight up",
+    minor: true,
+    fits: ["minorPent"],
+    chords: [
+      { numeral: "i", semitones: 0, quality: "min", beats: 8 },
+      { numeral: "iv", semitones: 5, quality: "min" },
+      { numeral: "v", semitones: 7, quality: "min" },
+    ],
+    tip: "All three chords live inside the minor pentatonic. Lean on the \u266d7 over the iv.",
+  },
+  {
+    id: "dorian-vamp",
+    name: "i – IV",
+    vibe: "Dorian vamp (Santana-ish)",
+    minor: true,
+    fits: ["minorPent"],
+    chords: [
+      { numeral: "i", semitones: 0, quality: "min7", beats: 8 },
+      { numeral: "IV", semitones: 5, quality: "maj", beats: 8 },
+    ],
+    tip: "Two chords, endless room. The major IV brightens the \u266d3 \u2014 that rub is the whole sound.",
+  },
+  {
+    id: "i-bvii",
+    name: "i – \u266dVII",
+    vibe: "Two-chord rock vamp",
+    minor: true,
+    fits: ["minorPent"],
+    chords: [
+      { numeral: "i", semitones: 0, quality: "min", beats: 8 },
+      { numeral: "\u266dVII", semitones: 10, quality: "maj", beats: 8 },
+    ],
+    tip: "The simplest loop there is. Perfect for drilling box crossings without thinking about changes.",
+  },
+  {
+    id: "i-iv-v",
+    name: "I – IV – V",
+    vibe: "Three chords and the truth",
+    fits: ["majorPent"],
+    chords: [
+      { numeral: "I", semitones: 0, quality: "maj", beats: 8 },
+      { numeral: "IV", semitones: 5, quality: "maj" },
+      { numeral: "V", semitones: 7, quality: "maj" },
+    ],
+    tip: "Major pentatonic throughout. Target the 3rd on the I, the root on the IV.",
+  },
+  {
+    id: "i-iii-iv-v",
+    name: "I – iii – IV – V",
+    vibe: "Bright and stepping up",
+    fits: ["majorPent"],
+    chords: [
+      { numeral: "I", semitones: 0, quality: "maj" },
+      { numeral: "iii", semitones: 4, quality: "min" },
+      { numeral: "IV", semitones: 5, quality: "maj" },
+      { numeral: "V", semitones: 7, quality: "maj" },
+    ],
+    tip: "The iii is the relative minor's neighbour \u2014 same pentatonic, different centre of gravity.",
+  },
+  {
+    id: "i-v-min",
+    name: "I – V",
+    vibe: "Open two-chord drone",
+    fits: ["majorPent"],
+    chords: [
+      { numeral: "I", semitones: 0, quality: "maj", beats: 8 },
+      { numeral: "V", semitones: 7, quality: "maj", beats: 8 },
+    ],
+    tip: "Good for hearing how the same five notes recolour against each chord.",
   },
 ];
 
@@ -119,4 +201,19 @@ export function realize(p: Progression, key: NoteName): ProgChord[] {
     numeral: rc.numeral,
     beats: rc.beats ?? 4,
   }));
+}
+
+/** Progressions whose tonic behaviour matches the scale being practised. */
+export function progressionsFor(kind: ScaleKind): Progression[] {
+  return PROGRESSIONS.filter((p) => p.fits.includes(kind));
+}
+
+/** n distinct items, chosen at random. Call from an effect — not during render. */
+export function sample<T>(arr: T[], n: number): T[] {
+  const pool = [...arr];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, Math.min(n, pool.length));
 }

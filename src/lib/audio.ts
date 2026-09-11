@@ -24,8 +24,13 @@ export function click(when: number, accent = false, gain = 1) {
   osc.stop(when + 0.1);
 }
 
+/** A sounding voice you can cut short (e.g. stopping a scheduled run). */
+export interface Voice {
+  stop: (when?: number) => void;
+}
+
 /** Guitar-ish pluck: triangle osc through a closing lowpass. */
-export function pluck(midi: number, when?: number, dur = 0.9, vol = 0.5) {
+export function pluck(midi: number, when?: number, dur = 0.9, vol = 0.5): Voice {
   const ac = audioCtx();
   const t = when ?? ac.currentTime;
   const f = midiToFreq(midi);
@@ -50,6 +55,21 @@ export function pluck(midi: number, when?: number, dur = 0.9, vol = 0.5) {
   lp.connect(g).connect(ac.destination);
   osc.start(t); osc2.start(t);
   osc.stop(t + dur + 0.05); osc2.stop(t + dur + 0.05);
+
+  return {
+    stop(when?: number) {
+      const at = Math.max(when ?? ac.currentTime, ac.currentTime);
+      try {
+        // A voice scheduled for later has no envelope yet; silence it outright.
+        g.gain.cancelScheduledValues(at);
+        g.gain.setValueAtTime(at < t ? 0.0001 : Math.max(g.gain.value, 0.0001), at);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.04);
+        osc.stop(at + 0.05); osc2.stop(at + 0.05);
+      } catch {
+        /* already stopped */
+      }
+    },
+  };
 }
 
 /** Piano-style block chord: all notes struck together, not staggered. */

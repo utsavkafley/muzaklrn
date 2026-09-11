@@ -5,7 +5,7 @@ import Fretboard, { FbNote } from "@/components/Fretboard";
 import ChordDiagram from "@/components/ChordDiagram";
 import {
   NOTES, NoteName, ScaleKind, chordName, chordTonePcs, lickTip,
-  noteAt, noteIndex, pentatonicBoxes,
+  noteAt, noteIndex, pentatonicBoxes, POSITION_SHAPE,
 } from "@/lib/theory";
 import { PROGRESSIONS, realize } from "@/lib/progressions";
 import { Metronome, audioCtx, click, pluck, strumChord } from "@/lib/audio";
@@ -30,7 +30,7 @@ export default function PracticePage() {
   // Which pentatonic fits: minor progressions → minor pent of key; major → major pent.
   const scaleKind: ScaleKind = prog.minor ? "minorPent" : "majorPent";
   const boxes = useMemo(() => pentatonicBoxes(key, scaleKind, 22), [key, scaleKind]);
-  const maxFret = Math.min(22, Math.max(15, ...boxes.map((n) => n.fret)) + 1);
+  const maxFret = 22; // full neck
 
   const activeChord = chords[chordIdx];
   const chordPcs = useMemo(() => new Set(chordTonePcs(activeChord.chord)), [activeChord]);
@@ -159,11 +159,12 @@ export default function PracticePage() {
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-bold text-neutral-100">
-            Lick zone — {key} {scaleKind === "minorPent" ? "minor" : "major"} pentatonic, box {box}
+            Lick zone — {key} {scaleKind === "minorPent" ? "minor" : "major"} pentatonic, Position {box} ({POSITION_SHAPE[scaleKind][(box - 1) % 5]})
           </h2>
           <div className="flex gap-1.5">
             {[1, 2, 3, 4, 5].map((b) => (
               <button key={b} onClick={() => setBox(b)}
+                title={`Position ${b} — ${POSITION_SHAPE[scaleKind][(b - 1) % 5]}`}
                 className={`h-8 w-8 rounded-full border text-sm ${box === b ? "border-amber-400 bg-amber-400/15 text-amber-300" : "border-neutral-700 text-neutral-400"}`}>
                 {b}
               </button>
@@ -176,7 +177,7 @@ export default function PracticePage() {
         </p>
         <Fretboard notes={fbNotes} maxFret={maxFret} />
         <p className="text-xs text-neutral-500">
-          The drill: strum the chord once when it changes, then fill the rest of the bar with a 3–4 note lick that lands on a gold note as the next chord hits. Switch boxes each round — that&apos;s your horizontal practice sneaking in.
+          The drill: strum the chord once when it changes, then fill the rest of the bar with a 3–4 note lick that lands on a gold note as the next chord hits. Switch positions each round — that&apos;s your horizontal practice sneaking in.
         </p>
       </div>
     </div>

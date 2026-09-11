@@ -26,6 +26,26 @@ export const SCALE_LABEL: Record<ScaleKind, string> = {
   majorPent: "major pentatonic",
 };
 
+/**
+ * CAGED shape name for each pentatonic position, 1..5.
+ *
+ * Position 1 is the shape anchored at the root on the low E string; positions
+ * then ascend the neck in CAGED order, which read from E is E → D → C → A → G.
+ * Minor pentatonic positions are named for the minor chord shapes they contain.
+ *
+ * Refs: rynaylorguitar.com/lessons/guitar-minor-pentatonic-scale (minor:
+ * Em/Dm/Cm/Am/Gm) and guitarhabits.com/the-5-major-pentatonic-scale-shapes-positions
+ * (major: E/D/C/A/G). Both anchor position 1 at the root on the 6th string.
+ */
+export const POSITION_SHAPE: Record<ScaleKind, string[]> = {
+  minorPent: ["Em shape", "Dm shape", "Cm shape", "Am shape", "Gm shape"],
+  majorPent: ["E shape", "D shape", "C shape", "A shape", "G shape"],
+};
+
+/** "Position 2 · Dm shape" */
+export const positionLabel = (kind: ScaleKind, box: number) =>
+  `Position ${box} \u00b7 ${POSITION_SHAPE[kind][(box - 1) % 5]}`;
+
 export const noteIndex = (n: NoteName) => NOTES.indexOf(n);
 export const noteAt = (i: number): NoteName => NOTES[((i % 12) + 12) % 12];
 
@@ -107,16 +127,38 @@ export function pentatonicBoxes(root: NoteName, kind: ScaleKind, maxFret = 22): 
   );
 
   const out: BoxNote[] = [];
+  const seen = new Set<string>();
   for (let s = 0; s < 6; s++) {
     const frets = perString[s];
     // First note of box 1 on this string: smallest scale fret >= anchor - 1.
-    let i0 = frets.findIndex((f) => f >= anchor - 1);
+    const i0 = frets.findIndex((f) => f >= anchor - 1);
     if (i0 < 0) continue;
-    for (let box = 1; box <= 5; box++) {
-      const a = frets[i0 + box - 1];
-      const b = frets[i0 + box];
+    // Keep tiling past box 5 — the shapes repeat an octave up, and a 22-fret
+    // neck holds roughly two full cycles. Box numbers cycle 1..5 with them.
+    for (let k = 0; i0 + k < frets.length; k++) {
+      const box = (k % 5) + 1;
+      const a = frets[i0 + k];
+      const b = frets[i0 + k + 1];
       for (const f of [a, b]) {
         if (f === undefined || f > maxFret) continue;
+        const key = `${s}:${f}:${box}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const src = all.find((n) => n.string === s && n.fret === f)!;
+        out.push({ ...src, box });
+      }
+    }
+    // Also walk backwards from box 1 so low frets below the anchor are covered
+    // (e.g. A minor pentatonic has scale tones at frets 0-3).
+    for (let k = 1; i0 - k >= 0; k++) {
+      const box = ((5 - (k % 5)) % 5) + 1;
+      const a = frets[i0 - k];
+      const b = frets[i0 - k + 1];
+      for (const f of [a, b]) {
+        if (f === undefined || f > maxFret) continue;
+        const key = `${s}:${f}:${box}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         const src = all.find((n) => n.string === s && n.fret === f)!;
         out.push({ ...src, box });
       }

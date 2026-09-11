@@ -23,8 +23,10 @@ interface Props {
 
 const INLAYS = [3, 5, 7, 9, 12, 15, 17, 19, 21];
 
-export default function Fretboard({ notes, maxFret = 17, onNoteClick, playOnClick = true, activeNote }: Props) {
-  const fretW = 46;
+export default function Fretboard({ notes, maxFret = 22, onNoteClick, playOnClick = true, activeNote }: Props) {
+  // Tighten the grid on a full neck so 22 frets stay on screen at a glance.
+  const fretW = maxFret > 17 ? 34 : 46;
+  const R = maxFret > 17 ? 9 : 10.5; // note radius
   const stringGap = 26;
   const left = 34; // room for open-string notes
   const top = 18;
@@ -79,19 +81,29 @@ export default function Fretboard({ notes, maxFret = 17, onNoteClick, playOnClic
               onNoteClick?.(n);
             }}
           >
-            <circle cx={fretX(n.fret)} cy={stringY(n.string)} r={10.5}
+            <circle cx={fretX(n.fret)} cy={stringY(n.string)} r={R}
               fill={n.fill} stroke={n.ring ?? "transparent"} strokeWidth={2.5} />
-            <text x={fretX(n.fret)} y={stringY(n.string) + 3.5} textAnchor="middle"
-              fontSize={9.5} fontWeight={700} fill="#0a0a0a">{n.label}</text>
+            <text x={fretX(n.fret)} y={stringY(n.string) + R * 0.34} textAnchor="middle"
+              fontSize={R * 0.9} fontWeight={700} fill="#0a0a0a">{n.label}</text>
           </g>
         ))}
         {activeNote && activeNote.fret <= maxFret && (
-          <circle
-            cx={fretX(activeNote.fret)} cy={stringY(activeNote.string)} r={10.5}
-            fill="none" stroke="#ffffff" strokeWidth={2.5}
-            className="animate-ping"
-            style={{ transformBox: "fill-box", transformOrigin: "center" }}
-          />
+          // Keyed so the pop animation restarts on every note of a run.
+          <g key={`${activeNote.string}-${activeNote.fret}`} pointerEvents="none">
+            <circle
+              cx={fretX(activeNote.fret)} cy={stringY(activeNote.string)} r={R + 7}
+              fill="none" stroke="#ffffff" strokeWidth={1.5} opacity={0.4}
+            >
+              <animate attributeName="r" from={R} to={R + 7} dur="0.16s" fill="freeze" />
+              <animate attributeName="opacity" from="0.9" to="0.4" dur="0.16s" fill="freeze" />
+            </circle>
+            <circle
+              cx={fretX(activeNote.fret)} cy={stringY(activeNote.string)} r={R + 3}
+              fill="none" stroke="#ffffff" strokeWidth={3}
+            >
+              <animate attributeName="r" from={R} to={R + 3} dur="0.16s" fill="freeze" />
+            </circle>
+          </g>
         )}
       </svg>
     </div>
