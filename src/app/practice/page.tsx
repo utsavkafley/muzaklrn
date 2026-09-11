@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Fretboard, { FbNote } from "@/components/Fretboard";
 import ChordDiagram from "@/components/ChordDiagram";
 import {
@@ -9,7 +9,7 @@ import {
 } from "@/lib/theory";
 import { PROGRESSIONS, realize } from "@/lib/progressions";
 import { Metronome, audioCtx, click, pluck, strumChord } from "@/lib/audio";
-import { logPractice } from "@/lib/store";
+import { DRILL_BASE_BPM, logDrill, subscribe, tempoFor } from "@/lib/store";
 import TipCard from "@/components/TipCard";
 
 export default function PracticePage() {
@@ -19,7 +19,16 @@ export default function PracticePage() {
 
   const [progId, setProgId] = useState(PROGRESSIONS[0].id);
   const [key, setKey] = useState<NoteName>("A");
-  const [bpm, setBpm] = useState(80);
+  // Tempo comes from the ladder; a nudge on the +/- buttons overrides it for
+  // this sitting only. Derived, so no effect has to copy it into state.
+  const ladderBpm = useSyncExternalStore(
+    subscribe,
+    () => tempoFor("changes"),
+    () => DRILL_BASE_BPM.changes,
+  );
+  const [bpmNudge, setBpmNudge] = useState<number | null>(null);
+  const bpm = bpmNudge ?? ladderBpm;
+  const setBpm = (f: (b: number) => number) => setBpmNudge((n) => f(n ?? ladderBpm));
   const [running, setRunning] = useState(false);
   const [chordIdx, setChordIdx] = useState(0);
   const [beatInChord, setBeatInChord] = useState(-1);
@@ -68,14 +77,20 @@ export default function PracticePage() {
     return beats;
   }, [chords]);
 
+  const cycles = useRef(0);
+  const [logged, setLogged] = useState<{ cycles: number; delta: number } | null>(null);
+
   const stateRef = useRef({ timeline, chords });
   stateRef.current = { timeline, chords };
 
-  useEffect(() => { logPractice("practice"); return () => m.stop(); }, [m]);
+  // No logging on mount. The Changes drill logs when a run of at least
+  // MIN_CYCLES complete passes through the progression ends.
+  useEffect(() => () => m.stop(), [m]);
   useEffect(() => { m.bpm = bpm; }, [bpm, m]);
 
   m.onTick = (t) => {
     const { timeline: tl, chords: ch } = stateRef.current;
+    if (t.count > 0 && t.count % tl.length === 0) cycles.current += 1;
     const step = tl[t.count % tl.length];
     const chord = ch[step.chordIdx];
     const rootPc = noteIndex(chord.chord.root);
@@ -91,11 +106,24 @@ export default function PracticePage() {
     setTimeout(() => { setChordIdx(step.chordIdx); setBeatInChord(step.beatInChord); }, delay);
   };
 
+  const MIN_CYCLES = 2; // below two times round it isn't a run
+
   const toggle = () => {
     if (running) {
       m.stop(); setRunning(false); setBeatInChord(-1);
+      const done = cycles.current;
+      if (done >= MIN_CYCLES) {
+        // Completing the changes at tempo is the measurement; there is nothing
+        // to grade against yet, so holding the full run is the pass.
+        const { tempoChanged } = logDrill({
+          drill: "changes", value: done, unit: "pct", tempo: bpm, passed: done >= 4,
+        });
+        setLogged({ cycles: done, delta: tempoChanged });
+      }
     } else {
       audioCtx();
+      cycles.current = 0;
+      setLogged(null);
       m.subsPerBeat = 1;
       m.start();
       setRunning(true);
@@ -181,6 +209,23 @@ export default function PracticePage() {
           The drill: strum the chord once when it changes, then fill the rest of the bar with a 3–4 note lick that lands on a gold note as the next chord hits. Switch positions each round — that&apos;s your horizontal practice sneaking in.
         </p>
       </div>
+
+      {logged && (
+        <div className={`rounded-2xl border p-4 text-sm ${logged.cycles >= 4 ? "border-emerald-700/60 bg-emerald-950/25" : "border-neutral-800 bg-neutral-900/50"}`}>
+          <p className="font-bold text-neutral-50">
+            Run logged — {logged.cycles} times through at {bpm} BPM.
+          </p>
+          <p className="mt-1 text-neutral-300">
+            {logged.delta > 0
+              ? `Two solid runs in a row. Next session goes to ${bpm + logged.delta} BPM.`
+              : logged.delta < 0
+                ? `Dropping to ${bpm + logged.delta} BPM next session — slowing down is the drill working.`
+                : logged.cycles >= 4
+                  ? "Four times round holds the changes. Once more and the tempo goes up."
+                  : "Four times round is the bar. Stay here until the changes are automatic."}
+          </p>
+        </div>
+      )}
 
       <TipCard
         room="practice"

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Metronome, audioCtx, click, strumNoise } from "@/lib/audio";
 import { STRUM_PATTERNS, COUNT_LABELS } from "@/lib/strums";
-import { logPractice, takePendingSong } from "@/lib/store";
+import { logDrill, takePendingSong, tempoFor } from "@/lib/store";
 import TipCard from "@/components/TipCard";
 
 type Tab = "metronome" | "tap" | "strum";
@@ -19,6 +19,7 @@ export default function GroovePage() {
 
   const [tab, setTab] = useState<Tab>("metronome");
   const [bpm, setBpm] = useState(90);
+  const [logged, setLogged] = useState<{ ms: number; delta: number } | null>(null);
   const [subs, setSubs] = useState(1);
   const [running, setRunning] = useState(false);
   const [pos, setPos] = useState(-1); // current sub within bar for UI
@@ -40,7 +41,13 @@ export default function GroovePage() {
   stateRef.current = { tab, muteClick, pattern };
 
   useEffect(() => {
-    logPractice("groove");
+    // No logging on mount — opening a page is not practice. The Clock drill
+    // logs itself when a scored run ends, further down in `toggle`.
+    setBpm(tempoFor("clock"));
+    // Read the deep link straight off the URL rather than via useSearchParams,
+    // which would force a Suspense boundary on this prerendered route.
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "tap" || t === "strum" || t === "metronome") setTab(t);
     const pending = takePendingSong();
     if (pending) setSong(pending); // guard: StrictMode runs effects twice and the take is destructive
     return () => m.stop();
@@ -65,12 +72,25 @@ export default function GroovePage() {
     setTimeout(() => setPos(t.sub), delay);
   };
 
+  const PASS_MS = 25; // the Stage 1 gate
+  const MIN_TAPS = 8; // below this it isn't a measurement
+
   const toggle = () => {
     if (running) {
       m.stop();
       setRunning(false);
       setPos(-1);
+      // A completed run is the only thing that counts as practice.
+      if (tab === "tap" && taps.length >= MIN_TAPS) {
+        const ms = taps.reduce((a, t) => a + Math.abs(t.offset), 0) / taps.length;
+        const { tempoChanged } = logDrill({
+          drill: "clock", value: Math.round(ms), unit: "ms",
+          tempo: bpm, passed: ms < PASS_MS,
+        });
+        setLogged({ ms: Math.round(ms), delta: tempoChanged });
+      }
     } else {
+      setLogged(null);
       audioCtx();
       m.subsPerBeat = tab === "strum" ? 2 : subs;
       m.start();
@@ -224,6 +244,22 @@ export default function GroovePage() {
               </div>
             )}
           </button>
+          {logged && (
+            <div className={`rounded-2xl border p-4 text-sm ${logged.ms < 25 ? "border-emerald-700/60 bg-emerald-950/25" : "border-neutral-800 bg-neutral-900/50"}`}>
+              <p className="font-bold text-neutral-50">
+                Run logged — {logged.ms} ms average at {bpm} BPM.
+              </p>
+              <p className="mt-1 text-neutral-300">
+                {logged.delta > 0
+                  ? `Two clean runs in a row. Next session goes to ${bpm + logged.delta} BPM.`
+                  : logged.delta < 0
+                    ? `Dropping to ${bpm + logged.delta} BPM next session — slowing down is the drill working, not a setback.`
+                    : logged.ms < 25
+                      ? "Under the 25 ms gate. Hold it once more and the tempo goes up."
+                      : "Under 25 ms is the Stage 1 gate. Keep the tempo here until it's comfortable."}
+              </p>
+            </div>
+          )}
           {meanAbs !== null && meanSigned !== null && taps.length >= 4 && (
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 text-sm">
               <div className="flex items-center justify-between">
@@ -251,7 +287,7 @@ export default function GroovePage() {
             </div>
           )}
           <p className="text-sm text-neutral-400">
-            Tap the pad (or spacebar) on every click. Under 20 ms average and you can trust your foot on stage. Pro move: mute the click every other bar and stay locked.
+            Tap the pad (or spacebar) on every click. Stop the metronome to log the run — eight taps minimum, or it isn’t a measurement. Under 25 ms average clears the Stage 1 gate.
           </p>
           <button onClick={() => setMuteClick((v) => !v)}
             className={`rounded-full border px-4 py-2 text-sm ${muteClick ? "border-amber-400 text-amber-300" : "border-neutral-700 text-neutral-400"}`}>

@@ -1,22 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Fretboard, { FbNote } from "@/components/Fretboard";
 import {
-  NOTES, NoteName, ScaleKind, SCALE_LABEL, POSITION_SHAPE, pentatonicBoxes, pivotNotes,
+  NOTES, NoteName, ScaleKind, SCALE_LABEL, POSITION_SHAPE, BoxNote, pentatonicBoxes,
   noteAt, midiAt, chordName, chordTonePcs, noteIndex, Chord,
 } from "@/lib/theory";
 import { PROGRESSIONS, Progression, progressionsFor, realize, sample } from "@/lib/progressions";
-import { pluck, strumChord, audioCtx, Voice } from "@/lib/audio";
-import { logPractice } from "@/lib/store";
+import { pluck, strumChord, click, audioCtx, Metronome, Voice } from "@/lib/audio";
+import { DRILL_BASE_BPM, logDrill, subscribe, tempoFor } from "@/lib/store";
 import TipCard from "@/components/TipCard";
 
 const BOX_COLORS = ["#fbbf24", "#34d399", "#60a5fa", "#f472b6", "#c084fc"]; // position 1..5
-const MAX_FRET = 22; // full neck
-const NOTE_SEC = 0.55; // demo run pace — slow enough to follow and copy
+const MAX_FRET = 22;
+const NOTE_SEC = 0.55;
+
+/** Strings the crossing gets called on — D, G and B, where the shared notes fall usefully. */
+const CROSS_STRINGS = [2, 3, 4] as const;
+const STRING_NAME = ["low E", "A", "D", "G", "B", "high E"];
+
+const REPS = 5;
+const PASS_PCT = 80;
 
 type Mode = "map" | "connect";
+type Phase = "idle" | "showing" | "playing" | "marking" | "done";
 
 /** Close ascending voicing from C3, for previewing a chord. */
 function voicing(c: Chord): number[] {
@@ -34,59 +42,84 @@ export default function ConnectClient() {
   const pathname = usePathname();
   const sp = useSearchParams();
 
-  // ---- URL is the source of truth for key / scale / mode / position ----
   const keyParam = sp.get("key");
   const root: NoteName = (NOTES as readonly string[]).includes(keyParam ?? "")
     ? (keyParam as NoteName)
     : "A";
   const kind: ScaleKind = sp.get("scale") === "major" ? "majorPent" : "minorPent";
   const mode: Mode = sp.get("mode") === "map" ? "map" : "connect";
-  const pair = Math.min(4, Math.max(1, Number(sp.get("pos")) || 1));
+  const pair = Math.min(5, Math.max(1, Number(sp.get("pos")) || 1));
+  /**
+   * Position 5 hands off to position 1 again — the numbering wraps, so this is
+   * the seam most players never drill even though it's the next shape up.
+   */
+  const upper = pair === 5 ? 1 : pair + 1;
 
   const [visible, setVisible] = useState<Set<number>>(new Set([1, 2, 3, 4, 5]));
   const [labelDegrees, setLabelDegrees] = useState(false);
   const [activeNote, setActiveNote] = useState<{ string: number; fret: number } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [shuffled, setShuffled] = useState<Progression[] | null>(null);
+
+  // --- scored drill ---
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [rep, setRep] = useState(0);
+  const [hits, setHits] = useState(0);
+  const [prompt, setPrompt] = useState<{ crossString: number; target: BoxNote } | null>(null);
+  const [outcome, setOutcome] = useState<{ pct: number; delta: number; hits: number } | null>(null);
+
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const voices = useRef<Voice[]>([]);
+  // The metronome is mutable, so it lives in a ref — and is only ever reached
+  // through getMet(), which is called from effects and handlers, never render.
+  const metRef = useRef<Metronome | null>(null);
+  const getMet = useCallback(() => {
+    if (!metRef.current) metRef.current = new Metronome();
+    return metRef.current;
+  }, []);
 
-  useEffect(() => { logPractice("connect"); }, []);
+  // The drill's tempo comes from the ladder, never from the student. Derived
+  // from the store so it needs no effect and no client/server mismatch.
+  const bpm = useSyncExternalStore(
+    subscribe,
+    () => tempoFor("seam"),
+    () => DRILL_BASE_BPM.seam,
+  );
 
   const clearTimers = () => {
     timers.current.forEach(clearTimeout);
     timers.current = [];
   };
 
-  const stopRun = useCallback(() => {
+  const stopAll = useCallback(() => {
     clearTimers();
     voices.current.forEach((v) => v.stop());
     voices.current = [];
+    getMet().stop();
     setActiveNote(null);
     setPlaying(false);
-  }, []);
+  }, [getMet]);
 
-  useEffect(() => stopRun, [stopRun]);
+  const abortDrill = useCallback(() => {
+    stopAll();
+    setPhase("idle");
+    setPrompt(null);
+    setRep(0);
+    setHits(0);
+  }, [stopAll]);
+
+  useEffect(() => stopAll, [stopAll]);
 
   const setParams = useCallback(
     (patch: Record<string, string>) => {
-      // Stop first: a run in flight would light up notes for the old setting.
-      stopRun();
+      abortDrill();
       const next = new URLSearchParams(sp.toString());
       for (const [k, v] of Object.entries(patch)) next.set(k, v);
       router.replace(`${pathname}?${next.toString()}`, { scroll: false });
     },
-    [sp, router, pathname, stopRun],
+    [sp, router, pathname, abortDrill],
   );
 
-  const flashNote = (n: { string: number; fret: number }) => {
-    setActiveNote(n);
-    timers.current.push(setTimeout(() => setActiveNote(null), 320));
-  };
-
-  // Derived, not set in an effect: the default trio is a stable rotation keyed
-  // on the tonic, so server and client agree. "shuffle" swaps in a random trio,
-  // and changing key or scale drops back to the rotation for the new pool.
   const pool = useMemo(() => progressionsFor(kind), [kind]);
   const picks = useMemo(() => {
     if (shuffled && shuffled.every((p) => pool.includes(p))) return shuffled;
@@ -96,12 +129,50 @@ export default function ConnectClient() {
   }, [pool, shuffled, root, kind]);
 
   const boxes = useMemo(() => pentatonicBoxes(root, kind, MAX_FRET), [root, kind]);
-  const pivots = useMemo(() => pivotNotes(boxes, pair), [boxes, pair]);
+
+  /**
+   * One occurrence of a position. Shapes repeat every octave, so `after` picks
+   * the occurrence sitting above a given fret rather than the lowest — which is
+   * what makes 5↔1 resolve to the octave above instead of dropping below.
+   */
+  const cycle = useCallback(
+    (box: number, after?: number) => {
+      const all = boxes.filter((n) => n.box === box);
+      const candidates = after === undefined ? all : all.filter((n) => n.fret >= after);
+      if (!candidates.length) return [];
+      const lo = Math.min(...candidates.map((n) => n.fret));
+      return all.filter((n) => n.fret >= lo && n.fret <= lo + 5);
+    },
+    [boxes],
+  );
+
+  /** The two shapes of the selected seam, and the notes they share. */
+  const seam = useMemo(() => {
+    const lower = cycle(pair);
+    if (!lower.length) return { lower, upper: [] as BoxNote[], pivots: [] as BoxNote[] };
+    const lowerLo = Math.min(...lower.map((n) => n.fret));
+    const up = cycle(upper, lowerLo);
+    const pivots = lower.filter((n) => up.some((u) => u.string === n.string && u.fret === n.fret));
+    return { lower, upper: up, pivots };
+  }, [cycle, pair, upper]);
+
+  const inSeam = useCallback(
+    (n: { string: number; fret: number }) =>
+      seam.lower.some((x) => x.string === n.string && x.fret === n.fret) ||
+      seam.upper.some((x) => x.string === n.string && x.fret === n.fret),
+    [seam],
+  );
+
+  const isPivot = useCallback(
+    (n: { string: number; fret: number }) =>
+      seam.pivots.some((p) => p.string === n.string && p.fret === n.fret),
+    [seam],
+  );
+
+  /** Once you're playing, the route is hidden — remembering it is the drill. */
+  const routeHidden = phase === "playing" || phase === "marking";
 
   const notes: FbNote[] = useMemo(() => {
-    const isPivot = (n: { string: number; fret: number }) =>
-      pivots.some((p) => p.string === n.string && p.fret === n.fret);
-
     if (mode === "map") {
       const seen = new Set<string>();
       return boxes
@@ -120,65 +191,53 @@ export default function ConnectClient() {
         }));
     }
 
-    const byPos = new Map<string, (typeof boxes)[number]>();
+    const byPos = new Map<string, BoxNote>();
     for (const n of boxes) {
       const k = `${n.string}:${n.fret}`;
       const cur = byPos.get(k);
-      const inPair = n.box === pair || n.box === pair + 1;
-      const curInPair = cur !== undefined && (cur.box === pair || cur.box === pair + 1);
-      if (!cur || (inPair && !curInPair)) byPos.set(k, n);
+      if (!cur || (inSeam(n) && !inSeam(cur))) byPos.set(k, n);
     }
     return [...byPos.values()].map((n) => {
-      const inPair = n.box === pair || n.box === pair + 1;
+      const here = inSeam(n);
       const piv = isPivot(n);
+      const isTarget = !!prompt && prompt.target.string === n.string && prompt.target.fret === n.fret;
+      const reveal = !routeHidden;
       return {
         string: n.string,
         fret: n.fret,
         label: labelDegrees ? n.degree : noteAt(n.pc),
-        fill: piv ? "#ffffff" : n.isRoot ? "#fca5a5" : BOX_COLORS[(n.box - 1) % 5],
-        ring: piv ? "#fbbf24" : undefined,
-        dim: !inPair,
+        fill:
+          isTarget && reveal ? "#ffffff"
+          : piv && reveal ? "#ffffff"
+          : n.isRoot ? "#fca5a5"
+          : BOX_COLORS[(n.box - 1) % 5],
+        ring: isTarget && reveal ? "#34d399" : piv && reveal ? "#fbbf24" : undefined,
+        dim: routeHidden ? true : !here,
       };
     });
-  }, [boxes, pivots, mode, pair, visible, labelDegrees]);
+  }, [boxes, mode, visible, labelDegrees, inSeam, isPivot, prompt, routeHidden]);
 
-  /**
-   * Positions repeat every octave now that the whole neck is tiled, so pick the
-   * lowest occurrence of the lower position and the occurrence of the upper one
-   * that sits directly above it — otherwise 3↔4 would jump down an octave.
-   */
-  const cycle = useCallback(
-    (box: number, after?: number) => {
-      const all = boxes.filter((n) => n.box === box);
-      const candidates = after === undefined ? all : all.filter((n) => n.fret >= after);
-      if (!candidates.length) return [];
-      const lo = Math.min(...candidates.map((n) => n.fret));
-      return all.filter((n) => n.fret >= lo && n.fret <= lo + 5);
-    },
-    [boxes],
-  );
+  const flashNote = (n: { string: number; fret: number }) => {
+    setActiveNote(n);
+    timers.current.push(setTimeout(() => setActiveNote(null), 320));
+  };
 
+  // ---------- demo run ----------
   const playRun = () => {
-    if (playing) { stopRun(); return; }
+    if (playing) { stopAll(); return; }
     const ac = audioCtx();
-    const a = cycle(pair);
-    if (!a.length) return;
-    const aLo = Math.min(...a.map((n) => n.fret));
-    const b = cycle(pair + 1, aLo);
+    const { lower, upper: up } = seam;
+    if (!lower.length) return;
 
     const seq: { string: number; fret: number }[] = [];
     for (let s = 0; s < 6; s++) {
-      const fr = a.filter((n) => n.string === s).map((n) => n.fret).sort((x, y) => x - y);
-      const frB = b.filter((n) => n.string === s).map((n) => n.fret).sort((x, y) => x - y);
-      if (s <= 2) {
-        fr.forEach((f) => seq.push({ string: s, fret: f }));
-      } else if (s === 3) {
-        // the crossing itself: finish the lower position, slide into the upper
+      const fr = lower.filter((n) => n.string === s).map((n) => n.fret).sort((x, y) => x - y);
+      const frB = up.filter((n) => n.string === s).map((n) => n.fret).sort((x, y) => x - y);
+      if (s <= 2) fr.forEach((f) => seq.push({ string: s, fret: f }));
+      else if (s === 3) {
         fr.forEach((f) => seq.push({ string: s, fret: f }));
         frB.filter((f) => f > (fr.at(-1) ?? 0)).forEach((f) => seq.push({ string: s, fret: f }));
-      } else {
-        frB.forEach((f) => seq.push({ string: s, fret: f }));
-      }
+      } else frB.forEach((f) => seq.push({ string: s, fret: f }));
     }
     if (!seq.length) return;
 
@@ -193,12 +252,82 @@ export default function ConnectClient() {
         setTimeout(() => setActiveNote(n), Math.max(0, (when - ac.currentTime) * 1000)),
       );
     });
-    const endMs = Math.max(0, (t0 + seq.length * NOTE_SEC - ac.currentTime) * 1000);
-    timers.current.push(setTimeout(() => { setActiveNote(null); setPlaying(false); }, endMs));
+    timers.current.push(
+      setTimeout(
+        () => { setActiveNote(null); setPlaying(false); },
+        Math.max(0, (t0 + seq.length * NOTE_SEC - ac.currentTime) * 1000),
+      ),
+    );
+  };
+
+  // ---------- the scored drill ----------
+  const newPrompt = useCallback(() => {
+    const strings = CROSS_STRINGS.filter((s) => seam.pivots.some((p) => p.string === s));
+    const choices = strings.length ? strings : [...CROSS_STRINGS];
+    const crossString = choices[Math.floor(Math.random() * choices.length)];
+    const landings = seam.upper.length ? seam.upper : seam.lower;
+    if (!landings.length) return null;
+    const target = landings[Math.floor(Math.random() * landings.length)];
+    return { crossString, target };
+  }, [seam]);
+
+  // The metronome is the drill's clock and only ever clicks.
+  useEffect(() => {
+    const met = getMet();
+    met.onTick = (t) => { click(t.when, t.sub === 0, 0.5); };
+    return () => { met.onTick = null; };
+  }, [getMet]);
+
+  const startRep = useCallback(
+    (n: number) => {
+      const p = newPrompt();
+      if (!p) return;
+      clearTimers();
+      setPrompt(p);
+      setRep(n);
+      setPhase("showing");
+
+      audioCtx();
+      const met = getMet();
+      met.bpm = bpm;
+      met.beatsPerBar = 4;
+      met.subsPerBeat = 1;
+      met.start();
+
+      const barMs = (60 / bpm) * 4 * 1000;
+      // One bar to memorise the route, two to play it, then you mark it.
+      timers.current.push(setTimeout(() => setPhase("playing"), barMs));
+      timers.current.push(setTimeout(() => { met.stop(); setPhase("marking"); }, barMs * 3));
+    },
+    [newPrompt, bpm, getMet],
+  );
+
+  const startDrill = () => {
+    setHits(0);
+    setOutcome(null);
+    startRep(1);
+  };
+
+  const mark = (landed: boolean) => {
+    clearTimers();
+    const nextHits = hits + (landed ? 1 : 0);
+    setHits(nextHits);
+    if (rep >= REPS) {
+      const pct = Math.round((nextHits / REPS) * 100);
+      const { tempoChanged } = logDrill({
+        drill: "seam", value: pct, unit: "pct", tempo: bpm, passed: pct >= PASS_PCT,
+      });
+      setOutcome({ pct, delta: tempoChanged, hits: nextHits });
+      setPhase("done");
+      setPrompt(null);
+    } else {
+      startRep(rep + 1);
+    }
   };
 
   const shapeOf = (box: number) => POSITION_SHAPE[kind][(box - 1) % 5];
   const scaleWord = kind === "minorPent" ? "minor" : "major";
+  const drillRunning = phase !== "idle" && phase !== "done";
 
   return (
     <div className="space-y-5">
@@ -209,13 +338,9 @@ export default function ConnectClient() {
         </p>
       </header>
 
-      {/* controls — key and scale live in the URL, so a view is shareable */}
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={root}
-          onChange={(e) => setParams({ key: e.target.value })}
-          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-        >
+        <select value={root} onChange={(e) => setParams({ key: e.target.value })}
+          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm">
           {NOTES.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
         <div className="flex overflow-hidden rounded-lg border border-neutral-700 text-sm">
@@ -227,10 +352,10 @@ export default function ConnectClient() {
           ))}
         </div>
         <div className="flex overflow-hidden rounded-lg border border-neutral-700 text-sm">
-          {(["map", "connect"] as Mode[]).map((m) => (
-            <button key={m} onClick={() => setParams({ mode: m })}
-              className={`px-3 py-2 ${mode === m ? "bg-amber-400/20 text-amber-300" : "bg-neutral-900 text-neutral-400"}`}>
-              {m === "map" ? "full map" : "connect"}
+          {(["map", "connect"] as Mode[]).map((md) => (
+            <button key={md} onClick={() => setParams({ mode: md })}
+              className={`px-3 py-2 ${mode === md ? "bg-amber-400/20 text-amber-300" : "bg-neutral-900 text-neutral-400"}`}>
+              {md === "map" ? "full map" : "connect"}
             </button>
           ))}
         </div>
@@ -243,9 +368,9 @@ export default function ConnectClient() {
       <p className="text-sm text-neutral-300">
         <span className="text-amber-300">{root} {SCALE_LABEL[kind]}</span>
         {mode === "connect" && (
-          <> — Position {pair} ({shapeOf(pair)}) into Position {pair + 1} ({shapeOf(pair + 1)}).
-          White notes with the gold ring are shared by both: slide through them and the position
-          change disappears. Shapes repeat an octave up, so the whole neck is shown.</>
+          <> — Position {pair} ({shapeOf(pair)}) into Position {upper} ({shapeOf(upper)})
+          {pair === 5 && <span className="text-amber-300/80"> — the wrap, where the numbering starts over</span>}. Gold-ringed white
+          notes are shared by both: slide through them and the position change disappears.</>
         )}
         {mode === "map" && <> — all five positions across the full neck. Roots are white.</>}
       </p>
@@ -259,7 +384,6 @@ export default function ConnectClient() {
                 if (nv.has(b)) nv.delete(b); else nv.add(b);
                 return nv.size ? nv : new Set([b]);
               })}
-              title={`Position ${b} — ${shapeOf(b)}`}
               className={`rounded-full border px-3 py-1.5 text-sm ${visible.has(b) ? "border-transparent text-neutral-950" : "border-neutral-700 text-neutral-500"}`}
               style={visible.has(b) ? { background: BOX_COLORS[b - 1] } : {}}>
               {b} · {shapeOf(b)}
@@ -268,32 +392,110 @@ export default function ConnectClient() {
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
-          {[1, 2, 3, 4].map((p) => (
-            <button key={p} onClick={() => setParams({ pos: String(p) })}
-              title={`${shapeOf(p)} into ${shapeOf(p + 1)}`}
-              className={`rounded-full border px-3 py-1.5 text-sm ${pair === p ? "border-amber-400 bg-amber-400/15 text-amber-300" : "border-neutral-700 text-neutral-400"}`}>
-              {p} ↔ {p + 1}
+          {[1, 2, 3, 4, 5].map((p) => (
+            <button key={p} onClick={() => setParams({ pos: String(p) })} disabled={drillRunning}
+              title={`${shapeOf(p)} into ${shapeOf(p === 5 ? 1 : p + 1)}`}
+              className={`rounded-full border px-3 py-1.5 text-sm disabled:opacity-40 ${pair === p ? "border-amber-400 bg-amber-400/15 text-amber-300" : "border-neutral-700 text-neutral-400"}`}>
+              {p} ↔ {p === 5 ? "1" : p + 1}{p === 5 && <span className="text-xs text-neutral-500"> wrap</span>}
             </button>
           ))}
-          <button onClick={playRun}
-            className={`ml-auto rounded-full px-4 py-1.5 text-sm font-bold ${playing ? "border border-neutral-600 text-neutral-200" : "bg-amber-400 text-neutral-950 hover:bg-amber-300"}`}>
+          <button onClick={playRun} disabled={drillRunning}
+            className={`ml-auto rounded-full px-4 py-1.5 text-sm font-bold disabled:opacity-40 ${playing ? "border border-neutral-600 text-neutral-200" : "bg-amber-400 text-neutral-950 hover:bg-amber-300"}`}>
             {playing ? "■ stop" : "▶ hear the crossing"}
           </button>
         </div>
       )}
 
+      {mode === "connect" && (
+        <section className={`rounded-2xl border p-4 ${drillRunning ? "border-amber-400/50 bg-amber-400/[0.06]" : "border-neutral-800 bg-neutral-900/50"}`}>
+          {phase === "idle" && (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-bold text-neutral-100">Seam drill</p>
+                  <p className="text-sm text-neutral-400">
+                    {REPS} crossings at {bpm} BPM. The route shows for one bar, then hides — you play it from memory.
+                  </p>
+                </div>
+                <button onClick={startDrill}
+                  className="rounded-full bg-amber-400 px-5 py-2 text-sm font-bold text-neutral-950 hover:bg-amber-300">
+                  Start drill →
+                </button>
+              </div>
+              <p className="mt-3 border-t border-neutral-800 pt-3 text-xs text-neutral-500">
+                You mark your own hits for now — the app can&apos;t hear you yet. Be honest; the
+                tempo ladder is only as useful as what you tell it.
+              </p>
+            </>
+          )}
+
+          {drillRunning && prompt && (
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-bold uppercase tracking-widest text-amber-400">
+                  Rep {rep} of {REPS} · {bpm} BPM
+                </p>
+                <button onClick={abortDrill} className="text-xs text-neutral-500 hover:text-neutral-300">
+                  stop
+                </button>
+              </div>
+              <p className="mt-2 text-lg font-bold text-neutral-50">
+                Position {pair} → {upper}, cross on the {STRING_NAME[prompt.crossString]} string.
+              </p>
+              <p className="mt-1 text-neutral-300">
+                Land on <b className="text-emerald-400">{noteAt(prompt.target.pc)}</b>{" "}
+                (fret {prompt.target.fret}, {STRING_NAME[prompt.target.string]}) on beat 1 of bar 2.
+              </p>
+              <p className="mt-2 text-sm text-amber-300/90">
+                {phase === "showing" ? "Route shown — memorise it." : "Route hidden. Play it."}
+              </p>
+              {phase === "marking" && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button onClick={() => mark(true)}
+                    className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-bold text-neutral-950 hover:bg-emerald-400">
+                    Landed it
+                  </button>
+                  <button onClick={() => mark(false)}
+                    className="rounded-full border border-neutral-600 px-5 py-2 text-sm text-neutral-200 hover:border-neutral-400">
+                    Missed
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {phase === "done" && outcome && (
+            <div>
+              <p className="text-lg font-bold text-neutral-50">
+                {outcome.pct}% — {outcome.hits} of {REPS} landed at {bpm} BPM.
+              </p>
+              <p className="mt-1 text-neutral-300">
+                {outcome.delta > 0
+                  ? `Two clean runs in a row. Next session goes to ${bpm + outcome.delta} BPM.`
+                  : outcome.delta < 0
+                    ? `Dropping to ${bpm + outcome.delta} BPM next session — slowing down is the drill working.`
+                    : outcome.pct >= PASS_PCT
+                      ? `Cleared ${PASS_PCT}%. Hold it once more and the tempo goes up.`
+                      : `${PASS_PCT}% is the bar. Stay at this tempo until the seam is automatic.`}
+              </p>
+              <button onClick={() => { setPhase("idle"); setOutcome(null); }}
+                className="mt-3 rounded-full border border-neutral-600 px-5 py-2 text-sm text-neutral-200 hover:border-neutral-400">
+                Again
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
       <Fretboard notes={notes} maxFret={MAX_FRET} activeNote={activeNote} onNoteClick={flashNote} />
 
-      {/* chords that work over this key + scale */}
       <section className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-bold text-neutral-100">
             Chords that work over {root} {SCALE_LABEL[kind]}
           </p>
-          <button
-            onClick={() => setShuffled(sample(pool, 3))}
-            className="text-xs text-neutral-500 hover:text-amber-400"
-          >
+          <button onClick={() => setShuffled(sample(pool, 3))}
+            className="text-xs text-neutral-500 hover:text-amber-400">
             shuffle →
           </button>
         </div>
@@ -304,12 +506,10 @@ export default function ConnectClient() {
               <p className="text-xs text-neutral-500">{p.vibe}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {realize(p, root).map((pc, i) => (
-                  <button
-                    key={`${pc.numeral}-${i}`}
+                  <button key={`${pc.numeral}-${i}`}
                     onClick={() => { audioCtx(); strumChord(voicing(pc.chord)); }}
                     title={`${pc.numeral} — tap to hear`}
-                    className="rounded-md border border-neutral-700 px-2 py-1 text-xs font-bold text-neutral-200 hover:border-amber-400/60 hover:text-amber-300"
-                  >
+                    className="rounded-md border border-neutral-700 px-2 py-1 text-xs font-bold text-neutral-200 hover:border-amber-400/60 hover:text-amber-300">
                     {chordName(pc.chord)}
                   </button>
                 ))}
@@ -326,15 +526,6 @@ export default function ConnectClient() {
       </section>
 
       <TipCard room="connect" ctx={{ root, kind, position: pair }} label="Scale tip" />
-
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 text-sm text-neutral-300">
-        <p className="mb-1 font-bold text-neutral-100">The drill</p>
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>Pick a pair of positions. Play up the lower one, but when you hit a <span className="text-amber-300">pivot note</span> on the G or B string, <em>slide</em> into the upper one and keep going.</li>
-          <li>Come back down crossing on a different string.</li>
-          <li>Tap any note to hear it. Use “hear the crossing” for the idea, then make your own path — that&apos;s the melody part.</li>
-        </ol>
-      </div>
     </div>
   );
 }

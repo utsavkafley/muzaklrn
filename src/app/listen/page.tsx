@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  SpotifyArtist, SpotifyTrack, artistBlurb, artistInfo, beginAuth, disconnect,
+  SpotifyArtist, artistBlurb, artistInfo, beginAuth, disconnect,
   handleCallback, isConnected, recentlyPlayed, spotifyConfigured,
 } from "@/lib/spotify";
 import { DEMO_TRACKS, ugSearchUrl, ytSearchUrl } from "@/lib/tidbits";
-import { logPractice, setPendingSong } from "@/lib/store";
+import {setPendingSong} from "@/lib/store";
 
 interface Row {
   song: string;
@@ -29,7 +29,6 @@ export default function ListenPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    logPractice("listen");
     (async () => {
       setConfigured(spotifyConfigured());
       await handleCallback();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Keyboard, { KeyNote } from "@/components/Keyboard";
 import {
   NOTES, NoteName, ScaleKind, SCALE_LABEL, chordName, chordTonePcs,
@@ -8,7 +8,6 @@ import {
 } from "@/lib/theory";
 import { PROGRESSIONS, realize, ProgChord } from "@/lib/progressions";
 import { audioCtx, blockChord, pluck } from "@/lib/audio";
-import { logPractice } from "@/lib/store";
 import TipCard from "@/components/TipCard";
 
 const LO = 60; // C4
@@ -20,7 +19,6 @@ export default function PianoPage() {
   const [progId, setProgId] = useState<string>("none");
   const [activeIdx, setActiveIdx] = useState(0);
 
-  useEffect(() => { logPractice("piano"); }, []);
 
   const prog = progId === "none" ? null : PROGRESSIONS.find((p) => p.id === progId)!;
   const chords: ProgChord[] = useMemo(() => (prog ? realize(prog, root) : []), [prog, root]);
