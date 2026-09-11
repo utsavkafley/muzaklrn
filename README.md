@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# muzaklrn
 
-## Getting Started
+Guitar practice for the seams between what you already know. A better way to spend phone time than reddit.
 
-First, run the development server:
+## The rooms
+
+| Room | What it trains |
+| --- | --- |
+| **Today** | Daily menu, streak, theory tidbit, "want to learn this?" card from your listening |
+| **Connect** | Horizontal movement — the five pentatonic boxes and the pivot notes that join them. Tap notes to hear them; "hear the crossing" plays a run across a seam |
+| **Groove** | Inner clock: metronome with subdivisions and count display, tap-timing trainer (scores you in ms, tells you if you rush or drag), strumming patterns with accents/dynamics |
+| **Practice** | Chord+lick: progression backing (bass + strums + click), chord diagrams, and a fretboard that highlights the current chord's safe landing notes inside any pentatonic box |
+| **Listen** | Spotify recently-played → Ultimate Guitar tab links, YouTube lessons, artist tidbits, and a tap-tempo handoff to Groove |
+
+## Run it
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Deploy (Vercel)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Push to GitHub, import in Vercel — zero config. Everything is client-side (Web Audio + localStorage); no server, no database.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Spotify (optional — demo mode works without it)
 
-## Learn More
+1. Create an app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
+2. Add redirect URIs: `http://127.0.0.1:3000/listen` (dev) and `https://<your-app>.vercel.app/listen` (prod)
+3. Set `NEXT_PUBLIC_SPOTIFY_CLIENT_ID` in `.env.local` and in Vercel project env vars
 
-To learn more about Next.js, take a look at the following resources:
+Uses Authorization Code + PKCE — no client secret, safe to run fully in the browser. Scopes: `user-read-recently-played`, `user-top-read`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> Note: Spotify retired the audio-features (BPM) endpoint for new apps in Nov 2024, so tempo-matching is done by ear via the tap-tempo button — which is deliberate rhythm practice anyway.
