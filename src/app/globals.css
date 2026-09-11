@@ -2,12 +2,66 @@
 
 @theme inline {
   --font-sans: var(--font-quicksand);
+
+  /* Quicksand is geometric and reads small, and this is a dark UI read at
+     arm's length with a guitar in your lap. Everything is nudged up a step
+     and given more leading than Tailwind's defaults. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.55;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.6;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.65;
+  --text-lg: 1.1875rem;
+  --text-lg--line-height: 1.55;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.45;
+  --text-2xl: 1.625rem;
+  --text-2xl--line-height: 1.3;
+  --text-3xl: 2rem;
+  --text-3xl--line-height: 1.25;
+  --text-4xl: 2.5rem;
+  --text-4xl--line-height: 1.15;
+  --text-5xl: 3.25rem;
+  --text-5xl--line-height: 1.1;
+}
+
+html {
+  /* Scales every rem-based size and space in one move. */
+  font-size: 17px;
 }
 
 body {
   background: #0a0a0a;
   color: #f5f5f5;
+  /* 400 goes thin and grey on near-black; 500 holds its colour. */
+  font-weight: 500;
   -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+/* Prose gets softer wrapping; headings avoid lonely last words. */
+p, li {
+  text-wrap: pretty;
+}
+h1, h2, h3 {
+  text-wrap: balance;
+}
+
+/* The handwritten display face carries the page — let it breathe. */
+.font-\[family-name\:var\(--font-caveat\)\] {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* Small uppercase labels need tracking to stay legible at weight 500. */
+.uppercase {
+  letter-spacing: 0.09em;
+}
+
+/* Numbers that change in place (BPM, counters) shouldn't jitter. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 /* big tap targets shouldn't select text on mobile */
@@ -15,4 +69,12 @@ button {
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
+  font-weight: 600;
+}
+
+/* Keyboard focus should be visible now that everything is bigger. */
+:focus-visible {
+  outline: 2px solid #fbbf24;
+  outline-offset: 2px;
+  border-radius: 6px;
 }

@@ -9,6 +9,7 @@ import {
 import { PROGRESSIONS, realize, ProgChord } from "@/lib/progressions";
 import { audioCtx, blockChord, pluck } from "@/lib/audio";
 import { logPractice } from "@/lib/store";
+import TipCard from "@/components/TipCard";
 
 const LO = 60; // C4
 const HI = LO + 24; // 2 octaves
@@ -131,6 +132,8 @@ export default function PianoPage() {
           <p className="text-sm text-neutral-400">{prog.tip}</p>
         )}
       </div>
+
+      <TipCard room="piano" ctx={{ root, kind }} label="Keys tip" />
 
       <div className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 text-sm text-neutral-300">
         <p className="mb-1 font-bold text-neutral-100">How to use this mid-jam</p>

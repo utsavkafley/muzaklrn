@@ -10,6 +10,7 @@ import {
 import { PROGRESSIONS, realize } from "@/lib/progressions";
 import { Metronome, audioCtx, click, pluck, strumChord } from "@/lib/audio";
 import { logPractice } from "@/lib/store";
+import TipCard from "@/components/TipCard";
 
 export default function PracticePage() {
   const met = useRef<Metronome | null>(null);
@@ -180,6 +181,12 @@ export default function PracticePage() {
           The drill: strum the chord once when it changes, then fill the rest of the bar with a 3–4 note lick that lands on a gold note as the next chord hits. Switch positions each round — that&apos;s your horizontal practice sneaking in.
         </p>
       </div>
+
+      <TipCard
+        room="practice"
+        ctx={{ root: key, kind: scaleKind, chord: activeChord.chord, position: box }}
+        label="Chord tip"
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
 import { PROGRESSIONS, Progression, progressionsFor, realize, sample } from "@/lib/progressions";
 import { pluck, strumChord, audioCtx, Voice } from "@/lib/audio";
 import { logPractice } from "@/lib/store";
+import TipCard from "@/components/TipCard";
 
 const BOX_COLORS = ["#fbbf24", "#34d399", "#60a5fa", "#f472b6", "#c084fc"]; // position 1..5
 const MAX_FRET = 22; // full neck
@@ -323,6 +324,8 @@ export default function ConnectClient() {
           )}
         </div>
       </section>
+
+      <TipCard room="connect" ctx={{ root, kind, position: pair }} label="Scale tip" />
 
       <div className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 text-sm text-neutral-300">
         <p className="mb-1 font-bold text-neutral-100">The drill</p>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Metronome, audioCtx, click, strumNoise } from "@/lib/audio";
 import { STRUM_PATTERNS, COUNT_LABELS } from "@/lib/strums";
 import { logPractice, takePendingSong } from "@/lib/store";
+import TipCard from "@/components/TipCard";
 
 type Tab = "metronome" | "tap" | "strum";
 
@@ -299,6 +300,8 @@ export default function GroovePage() {
           Daily dose: 2 minutes at 60 BPM just counting out loud, foot on the beats. Then switch to ♪♪ and say “1 & 2 &…” — the & is where your upstrums live.
         </p>
       )}
+
+      <TipCard room="groove" ctx={{ root: "A", kind: "minorPent" }} label="Rhythm tip" />
     </div>
   );
 }
