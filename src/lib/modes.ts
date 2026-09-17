@@ -44,11 +44,6 @@ export interface Mode {
   relativeMajorDown: number;
   /** A vamp that holds this mode still instead of collapsing to the relative major. */
   vamp: ModeVampChord[];
-  vibe: string;
-  /** What it's actually for. */
-  why: string;
-  /** Somewhere it's unmistakable. */
-  heard: string;
 }
 
 /**
@@ -69,9 +64,6 @@ export const MODES: Mode[] = [
       { numeral: "Imaj7", semitones: 0, quality: "maj7" },
       { numeral: "II", semitones: 2, quality: "maj" },
     ],
-    vibe: "Major, but floating",
-    why: "Major pentatonic with the roof taken off. The ♯4 removes the one note that pulls a major scale back down to earth, so nothing ever resolves and everything hangs in the air. Use it when you want wonder rather than warmth.",
-    heard: "The Simpsons theme — that opening leap onto the ♯4 is the entire joke.",
   },
   {
     id: "ionian",
@@ -87,9 +79,6 @@ export const MODES: Mode[] = [
       { numeral: "Imaj7", semitones: 0, quality: "maj7" },
       { numeral: "IV", semitones: 5, quality: "maj" },
     ],
-    vibe: "Home. The default major.",
-    why: "The major scale, and the reason major pentatonic exists: drop Ionian's two most awkward notes — the 4, which fights the 3, and the 7, which demands resolution — and what's left is the pentatonic that can't sound wrong. Adding them back buys you tension you then have to handle.",
-    heard: "Let It Be. Any hymn. The sound of nothing being withheld.",
   },
   {
     id: "mixolydian",
@@ -104,9 +93,6 @@ export const MODES: Mode[] = [
       { numeral: "I7", semitones: 0, quality: "7" },
       { numeral: "♭VII", semitones: 10, quality: "maj" },
     ],
-    vibe: "Major that refuses to go home",
-    why: "Major pentatonic over a dominant chord. The ♭7 is already in the chord under you, so it doesn't clash — it just removes the leading tone, and with it the obligation to resolve. This is the mode most rock guitar actually lives in, whatever the player calls it.",
-    heard: "Sweet Home Alabama. Most Allman Brothers. Every riff that sits on a 7 chord and never leaves.",
   },
   {
     id: "dorian",
@@ -121,9 +107,6 @@ export const MODES: Mode[] = [
       { numeral: "i7", semitones: 0, quality: "min7" },
       { numeral: "IV", semitones: 5, quality: "maj" },
     ],
-    vibe: "Minor with the lights on",
-    why: "Minor pentatonic plus a natural 6, and that one note is the difference between sad and cool. It is the single highest-value mode for a pentatonic player: the shapes don't move, you add one finger, and a tired blues box turns into Santana.",
-    heard: "So What. Oye Como Va. Scarborough Fair.",
   },
   {
     id: "aeolian",
@@ -140,9 +123,6 @@ export const MODES: Mode[] = [
       { numeral: "♭VI", semitones: 8, quality: "maj" },
       { numeral: "♭VII", semitones: 10, quality: "maj" },
     ],
-    vibe: "The default sad",
-    why: "The natural minor scale — minor pentatonic with the 2 and the ♭6 filled in. The ♭6 is the ache: it leans down onto the 5 and won't leave it alone. One note darker than Dorian, and the whole mood changes from cool to hurt.",
-    heard: "Almost every minor-key rock song ever written. It is the sound you already default to.",
   },
   {
     id: "phrygian",
@@ -157,9 +137,6 @@ export const MODES: Mode[] = [
       { numeral: "i", semitones: 0, quality: "min" },
       { numeral: "♭II", semitones: 1, quality: "maj" },
     ],
-    vibe: "Spanish, or menacing",
-    why: "A half step above the root is the most unstable note available, and Phrygian puts it there on purpose. Slide ♭2 down to 1 and you have flamenco; hammer it against a low root and you have metal. Same note, same mode, two genres.",
-    heard: "Flamenco, all of it. Any riff that grinds a half step above an open low string.",
   },
   {
     id: "locrian",
@@ -175,9 +152,6 @@ export const MODES: Mode[] = [
       { numeral: "im7♭5", semitones: 0, quality: "m7b5" },
       { numeral: "♭II", semitones: 1, quality: "maj" },
     ],
-    vibe: "No floor",
-    why: "The exception that proves the frame. Locrian is the one mode that is not your pentatonic plus two notes — it flattens the 5, the note that makes a root feel like a root. Without a stable fifth there is no home chord to come back to, which is why essentially nobody writes in it. Know it so you can hear what the 5 was doing for you.",
-    heard: "Almost nothing, honestly. Its chord is the m7♭5 that passes through a minor ii–V.",
   },
 ];
 

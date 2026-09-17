@@ -7,10 +7,9 @@ import {
   NOTES, NoteName, ScaleKind, SCALE_LABEL, POSITION_SHAPE, BoxNote, pentatonicBoxes,
   noteAt, midiAt, chordName, chordTonePcs, noteIndex, Chord,
 } from "@/lib/theory";
-import { PROGRESSIONS, Progression, progressionsFor, realize, sample } from "@/lib/progressions";
+import { Progression, progressionsFor, realize, sample } from "@/lib/progressions";
 import { pluck, strumChord, click, audioCtx, Metronome, Voice } from "@/lib/audio";
 import { DRILL_BASE_BPM, logDrill, subscribe, tempoFor } from "@/lib/store";
-import TipCard from "@/components/TipCard";
 
 const BOX_COLORS = ["#fbbf24", "#34d399", "#60a5fa", "#f472b6", "#c084fc"]; // position 1..5
 const MAX_FRET = 22;
@@ -18,7 +17,7 @@ const NOTE_SEC = 0.55;
 
 /** Strings the crossing gets called on — D, G and B, where the shared notes fall usefully. */
 const CROSS_STRINGS = [2, 3, 4] as const;
-const STRING_NAME = ["low E", "A", "D", "G", "B", "high E"];
+const STRING_NAME = ["E", "A", "D", "G", "B", "e"]; // low to high, lowercase = top string
 
 const REPS = 5;
 const PASS_PCT = 80;
@@ -331,12 +330,7 @@ export default function ConnectClient() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-700">Connect</h1>
-        <p className="text-sm text-neutral-600">
-          You know all five positions. The neck is one scale — these are the seams.
-        </p>
-      </header>
+      <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-700">Connect</h1>
 
       <div className="flex flex-wrap items-center gap-2">
         <select value={root} onChange={(e) => setParams({ key: e.target.value })}
@@ -355,24 +349,24 @@ export default function ConnectClient() {
           {(["map", "connect"] as Mode[]).map((md) => (
             <button key={md} onClick={() => setParams({ mode: md })}
               className={`px-3 py-2 ${mode === md ? "bg-amber-400/20 text-amber-700" : "bg-neutral-100 text-neutral-600"}`}>
-              {md === "map" ? "full map" : "connect"}
+              <span aria-label={md}>{md === "map" ? "≡" : "⇄"}</span>
             </button>
           ))}
         </div>
         <button onClick={() => setLabelDegrees((v) => !v)}
-          className="rounded-lg border border-neutral-300 bg-neutral-100 px-3 py-2 text-sm text-neutral-600">
-          {labelDegrees ? "showing degrees" : "showing notes"}
+          aria-label="labels"
+          className="w-12 rounded-lg border border-neutral-300 bg-neutral-100 py-2 text-center text-sm text-neutral-600">
+          {labelDegrees ? "1" : "A"}
         </button>
       </div>
 
-      <p className="text-sm text-neutral-700">
+      <p className="text-lg text-neutral-800">
         <span className="text-amber-700">{root} {SCALE_LABEL[kind]}</span>
         {mode === "connect" && (
-          <> — Position {pair} ({shapeOf(pair)}) into Position {upper} ({shapeOf(upper)})
-          {pair === 5 && <span className="text-amber-700/80"> — the wrap, where the numbering starts over</span>}. Gold-ringed white
-          notes are shared by both: slide through them and the position change disappears.</>
+          <span className="text-neutral-500">
+            {" · "}{shapeOf(pair)} <span aria-hidden>→</span> {shapeOf(upper)}
+          </span>
         )}
-        {mode === "map" && <> — all five positions across the full neck. Roots are white.</>}
       </p>
 
       {mode === "map" ? (
@@ -386,7 +380,7 @@ export default function ConnectClient() {
               })}
               className={`rounded-full border px-3 py-1.5 text-sm ${visible.has(b) ? "border-transparent text-neutral-950" : "border-neutral-300 text-neutral-500"}`}
               style={visible.has(b) ? { background: BOX_COLORS[b - 1] } : {}}>
-              {b} · {shapeOf(b)}
+              {b} <span className="text-xs">{shapeOf(b)}</span>
             </button>
           ))}
         </div>
@@ -396,12 +390,12 @@ export default function ConnectClient() {
             <button key={p} onClick={() => setParams({ pos: String(p) })} disabled={drillRunning}
               title={`${shapeOf(p)} into ${shapeOf(p === 5 ? 1 : p + 1)}`}
               className={`rounded-full border px-3 py-1.5 text-sm disabled:opacity-40 ${pair === p ? "border-amber-400 bg-amber-400/15 text-amber-700" : "border-neutral-300 text-neutral-600"}`}>
-              {p} ↔ {p === 5 ? "1" : p + 1}{p === 5 && <span className="text-xs text-neutral-500"> wrap</span>}
+              {p} ↔ {p === 5 ? "1" : p + 1}
             </button>
           ))}
-          <button onClick={playRun} disabled={drillRunning}
-            className={`ml-auto rounded-full px-4 py-1.5 text-sm font-bold disabled:opacity-40 ${playing ? "border border-neutral-400 text-neutral-800" : "bg-amber-400 text-neutral-950 hover:bg-amber-300"}`}>
-            {playing ? "■ stop" : "▶ hear the crossing"}
+          <button onClick={playRun} disabled={drillRunning} aria-label="play"
+            className={`ml-auto h-10 w-10 rounded-full text-base font-bold disabled:opacity-40 ${playing ? "border border-neutral-400 text-neutral-800" : "bg-amber-400 text-neutral-950 hover:bg-amber-300"}`}>
+            {playing ? "■" : "▶"}
           </button>
         </div>
       )}
@@ -410,54 +404,67 @@ export default function ConnectClient() {
         <section className={`rounded-2xl border p-4 ${drillRunning ? "border-amber-400/50 bg-amber-400/[0.06]" : "border-neutral-200 bg-neutral-100/50"}`}>
           {phase === "idle" && (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="font-bold text-neutral-900">Seam drill</p>
-                  <p className="text-sm text-neutral-600">
-                    {REPS} crossings at {bpm} BPM. The route shows for one bar, then hides — you play it from memory.
-                  </p>
-                </div>
-                <button onClick={startDrill}
-                  className="rounded-full bg-amber-400 px-5 py-2 text-sm font-bold text-neutral-950 hover:bg-amber-300">
-                  Start drill →
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <p className="text-lg font-bold tabular-nums text-neutral-900">
+                  {pair} <span className="font-normal text-neutral-400">↔</span> {upper}
+                </p>
+                <p className="tabular-nums text-neutral-500">
+                  {REPS}<span aria-hidden>×</span>
+                  <span className="ml-3 text-neutral-700">{bpm}</span>
+                  <span className="ml-1 text-xs uppercase tracking-widest text-neutral-500">bpm</span>
+                </p>
+                <button onClick={startDrill} aria-label="start"
+                  className="ml-auto h-12 w-12 rounded-full bg-amber-400 text-xl font-bold text-neutral-950 hover:bg-amber-300">
+                  ▶
                 </button>
               </div>
-              <p className="mt-3 border-t border-neutral-200 pt-3 text-xs text-neutral-500">
-                You mark your own hits for now — the app can&apos;t hear you yet. Be honest; the
-                tempo ladder is only as useful as what you tell it.
-              </p>
             </>
           )}
 
           {drillRunning && prompt && (
             <div>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-bold uppercase tracking-widest text-amber-700">
-                  Rep {rep} of {REPS} · {bpm} BPM
+                <p className="text-sm font-bold tabular-nums text-amber-700">
+                  {rep}/{REPS} <span className="text-neutral-400">·</span> {bpm}
+                  <span className="ml-1 text-xs uppercase tracking-widest text-neutral-500">bpm</span>
                 </p>
-                <button onClick={abortDrill} className="text-xs text-neutral-500 hover:text-neutral-700">
-                  stop
-                </button>
+                <button onClick={abortDrill} aria-label="stop"
+                  className="text-sm text-neutral-500 hover:text-neutral-700">✕</button>
               </div>
-              <p className="mt-2 text-lg font-bold text-neutral-950">
-                Position {pair} → {upper}, cross on the {STRING_NAME[prompt.crossString]} string.
-              </p>
-              <p className="mt-1 text-neutral-700">
-                Land on <b className="text-emerald-700">{noteAt(prompt.target.pc)}</b>{" "}
-                (fret {prompt.target.fret}, {STRING_NAME[prompt.target.string]}) on beat 1 of bar 2.
-              </p>
-              <p className="mt-2 text-sm text-amber-700/90">
-                {phase === "showing" ? "Route shown — memorise it." : "Route hidden. Play it."}
+              {/* Three facts, boxed apart: the crossing, the string you cross on,
+                  and where you land. A string name and a note name can be the
+                  same letter, so they must not sit side by side unlabelled. */}
+              <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 tabular-nums">
+                <span className="text-2xl font-bold text-neutral-900">
+                  {pair}<span className="mx-1 font-normal text-neutral-400">→</span>{upper}
+                </span>
+                <span className="rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-600">
+                  <span aria-hidden className="mr-1 text-neutral-400">⇄</span>
+                  {STRING_NAME[prompt.crossString]}
+                </span>
+                <span className="flex items-baseline gap-2 rounded-md bg-emerald-500/15 px-2.5 py-0.5">
+                  <b className="text-2xl text-emerald-700">{noteAt(prompt.target.pc)}</b>
+                  <span className="text-sm text-neutral-600">
+                    {STRING_NAME[prompt.target.string]}
+                    <span className="mx-0.5 text-neutral-400">/</span>
+                    <span className="text-neutral-800">{prompt.target.fret}</span>
+                  </span>
+                </span>
+                {/* Filled while the route is on the neck, hollow once it hides. */}
+                <span aria-hidden
+                  className={`ml-auto h-3 w-3 rounded-full ${
+                    phase === "showing" ? "bg-amber-400" : "border-2 border-neutral-300"
+                  }`} />
               </p>
               {phase === "marking" && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button onClick={() => mark(true)}
-                    className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-bold text-neutral-950 hover:bg-emerald-400">
-                    Landed it
+                  <button onClick={() => mark(true)} aria-label="landed"
+                    className="h-12 w-12 rounded-full bg-emerald-500 text-lg font-bold text-neutral-950 hover:bg-emerald-400">
+                    ✓
                   </button>
-                  <button onClick={() => mark(false)}
-                    className="rounded-full border border-neutral-400 px-5 py-2 text-sm text-neutral-800 hover:border-neutral-600">
-                    Missed
+                  <button onClick={() => mark(false)} aria-label="missed"
+                    className="h-12 w-12 rounded-full border border-neutral-400 text-lg text-neutral-800 hover:border-neutral-600">
+                    ✕
                   </button>
                 </div>
               )}
@@ -466,22 +473,23 @@ export default function ConnectClient() {
 
           {phase === "done" && outcome && (
             <div>
-              <p className="text-lg font-bold text-neutral-950">
-                {outcome.pct}% — {outcome.hits} of {REPS} landed at {bpm} BPM.
-              </p>
-              <p className="mt-1 text-neutral-700">
-                {outcome.delta > 0
-                  ? `Two clean runs in a row. Next session goes to ${bpm + outcome.delta} BPM.`
-                  : outcome.delta < 0
-                    ? `Dropping to ${bpm + outcome.delta} BPM next session — slowing down is the drill working.`
-                    : outcome.pct >= PASS_PCT
-                      ? `Cleared ${PASS_PCT}%. Hold it once more and the tempo goes up.`
-                      : `${PASS_PCT}% is the bar. Stay at this tempo until the seam is automatic.`}
-              </p>
-              <button onClick={() => { setPhase("idle"); setOutcome(null); }}
-                className="mt-3 rounded-full border border-neutral-400 px-5 py-2 text-sm text-neutral-800 hover:border-neutral-600">
-                Again
-              </button>
+              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 tabular-nums">
+                <span className={`text-4xl font-bold ${outcome.pct >= PASS_PCT ? "text-emerald-700" : "text-neutral-900"}`}>
+                  {outcome.pct}%
+                </span>
+                <span className="text-neutral-500">{outcome.hits}/{REPS}</span>
+                <span className="text-neutral-700">
+                  {bpm + outcome.delta}
+                  <span className="ml-1 text-xs uppercase tracking-widest text-neutral-500">bpm</span>
+                  <span aria-hidden className={`ml-1 ${outcome.delta > 0 ? "text-emerald-700" : outcome.delta < 0 ? "text-amber-700" : "text-neutral-400"}`}>
+                    {outcome.delta > 0 ? "↑" : outcome.delta < 0 ? "↓" : "="}
+                  </span>
+                </span>
+                <button onClick={() => { setPhase("idle"); setOutcome(null); }} aria-label="again"
+                  className="ml-auto h-11 w-11 rounded-full border border-neutral-400 text-base text-neutral-800 hover:border-neutral-600">
+                  ↻
+                </button>
+              </div>
             </div>
           )}
         </section>
@@ -491,41 +499,29 @@ export default function ConnectClient() {
 
       <section className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-4">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-bold text-neutral-900">
-            Chords that work over {root} {SCALE_LABEL[kind]}
-          </p>
-          <button onClick={() => setShuffled(sample(pool, 3))}
-            className="text-xs text-neutral-500 hover:text-amber-700">
-            shuffle →
-          </button>
+          <p className="text-sm font-bold text-neutral-900">{root} {SCALE_LABEL[kind]}</p>
+          <button onClick={() => setShuffled(sample(pool, 3))} aria-label="shuffle"
+            className="text-base text-neutral-500 hover:text-amber-700">⇄</button>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {picks.map((p) => (
             <div key={p.id} className="rounded-xl border border-neutral-200 bg-neutral-50/50 p-3">
               <p className="text-sm font-bold text-amber-700">{p.name}</p>
-              <p className="text-xs text-neutral-500">{p.vibe}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {realize(p, root).map((pc, i) => (
                   <button key={`${pc.numeral}-${i}`}
                     onClick={() => { audioCtx(); strumChord(voicing(pc.chord)); }}
-                    title={`${pc.numeral} — tap to hear`}
+                    title={pc.numeral}
                     className="rounded-md border border-neutral-300 px-2 py-1 text-xs font-bold text-neutral-800 hover:border-amber-400/60 hover:text-amber-700">
                     {chordName(pc.chord)}
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-xs text-neutral-600">{p.tip}</p>
             </div>
           ))}
-          {picks.length === 0 && (
-            <p className="text-xs text-neutral-400">
-              {PROGRESSIONS.length ? "Loading…" : "No progressions available."}
-            </p>
-          )}
         </div>
       </section>
 
-      <TipCard room="connect" ctx={{ root, kind, position: pair }} label="Scale tip" />
     </div>
   );
 }

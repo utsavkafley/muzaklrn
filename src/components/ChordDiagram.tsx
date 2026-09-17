@@ -11,7 +11,7 @@ export default function ChordDiagram({ chord, active = false }: { chord: Chord; 
   const hasOpen = frets.some((f) => f === 0);
   const lo = !hasOpen && played.length && Math.min(...played) > 1 ? Math.min(...played) : 1;
 
-  const W = 92, H = 112;
+  const W = 92, H = 104;
   const gridL = 16, gridT = 24, gridW = 62, gridH = 68;
   const colX = (s: number) => gridL + (s * gridW) / 5;
   const rowY = (r: number) => gridT + (r * gridH) / 4;
@@ -31,7 +31,7 @@ export default function ChordDiagram({ chord, active = false }: { chord: Chord; 
           ? "border-amber-400 bg-amber-400/10"
           : "border-neutral-200 bg-neutral-100/60 hover:border-neutral-400"
       }`}
-      title={`${chordName(chord)} — tap to hear`}
+      title={chordName(chord)}
     >
       <svg width={W} height={H}>
         <text x={W / 2} y={13} textAnchor="middle" fontSize={12} fontWeight={700}
@@ -63,9 +63,6 @@ export default function ChordDiagram({ chord, active = false }: { chord: Chord; 
               fill={active ? "#fbbf24" : "#3f3f46"} />
           );
         })}
-        <text x={W / 2} y={H - 4} textAnchor="middle" fontSize={8} className="fill-neutral-500">
-          tap to hear
-        </text>
       </svg>
     </button>
   );

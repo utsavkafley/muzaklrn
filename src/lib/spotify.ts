@@ -192,11 +192,3 @@ export async function artistInfo(id: string): Promise<SpotifyArtist | null> {
   };
 }
 
-export function artistBlurb(a: SpotifyArtist): string {
-  const genres = a.genres.slice(0, 3).join(", ");
-  const fans = a.followers >= 1_000_000
-    ? `${(a.followers / 1_000_000).toFixed(1)}M`
-    : `${Math.round(a.followers / 1000)}k`;
-  const pop = a.popularity >= 75 ? "certified huge" : a.popularity >= 50 ? "solidly beloved" : "a deep cut — good taste";
-  return `${a.name}${genres ? ` — filed under ${genres}` : ""}. ${fans} followers, ${pop}.`;
-}

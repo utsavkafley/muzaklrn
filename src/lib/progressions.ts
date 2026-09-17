@@ -10,12 +10,10 @@ export interface RomanChord {
 export interface Progression {
   id: string;
   name: string;
-  vibe: string;
   minor?: boolean; // key is treated as minor
   /** Which pentatonic sits naturally over this, with the key as tonic. */
   fits: ScaleKind[];
   chords: RomanChord[];
-  tip: string;
 }
 
 export const PROGRESSIONS: Progression[] = [
@@ -23,46 +21,39 @@ export const PROGRESSIONS: Progression[] = [
     id: "axis",
     fits: ["majorPent"],
     name: "I – V – vi – IV",
-    vibe: "The pop workhorse",
     chords: [
       { numeral: "I", semitones: 0, quality: "maj" },
       { numeral: "V", semitones: 7, quality: "maj" },
       { numeral: "vi", semitones: 9, quality: "min" },
       { numeral: "IV", semitones: 5, quality: "maj" },
     ],
-    tip: "Major pentatonic of the key works over everything. The vi chord is your relative minor — same five notes.",
   },
   {
     id: "axis-min",
     fits: ["majorPent", "minorPent"],
     name: "vi – IV – I – V",
-    vibe: "Same four chords, sadder order",
     chords: [
       { numeral: "vi", semitones: 9, quality: "min" },
       { numeral: "IV", semitones: 5, quality: "maj" },
       { numeral: "I", semitones: 0, quality: "maj" },
       { numeral: "V", semitones: 7, quality: "maj" },
     ],
-    tip: "Start licks on the vi root and this feels minor. Try the minor pentatonic of the vi chord.",
   },
   {
     id: "50s",
     fits: ["majorPent"],
     name: "I – vi – IV – V",
-    vibe: "Doo-wop / 50s",
     chords: [
       { numeral: "I", semitones: 0, quality: "maj" },
       { numeral: "vi", semitones: 9, quality: "min" },
       { numeral: "IV", semitones: 5, quality: "maj" },
       { numeral: "V", semitones: 7, quality: "maj" },
     ],
-    tip: "Classic turnaround. Practice walking your lick down as the chords fall.",
   },
   {
     id: "blues",
     fits: ["minorPent", "majorPent"],
-    name: "12-bar blues (I7 IV7 V7)",
-    vibe: "Where the pentatonic lives",
+    name: "I7 – IV7 – V7",
     chords: [
       { numeral: "I7", semitones: 0, quality: "7", beats: 16 },
       { numeral: "IV7", semitones: 5, quality: "7", beats: 8 },
@@ -72,13 +63,11 @@ export const PROGRESSIONS: Progression[] = [
       { numeral: "I7", semitones: 0, quality: "7", beats: 4 },
       { numeral: "V7", semitones: 7, quality: "7", beats: 4 },
     ],
-    tip: "Minor pentatonic over dominant chords = the blues sound. Bend the ♭3 toward the 3.",
   },
   {
     id: "andalusian",
     fits: ["minorPent"],
     name: "i – ♭VII – ♭VI – V",
-    vibe: "Andalusian / flamenco descent",
     minor: true,
     chords: [
       { numeral: "i", semitones: 0, quality: "min" },
@@ -86,25 +75,21 @@ export const PROGRESSIONS: Progression[] = [
       { numeral: "♭VI", semitones: 8, quality: "maj" },
       { numeral: "V", semitones: 7, quality: "maj" },
     ],
-    tip: "Minor pentatonic all the way; on the V chord the ♭7 rubs — resolve to the root.",
   },
   {
     id: "251",
     fits: ["majorPent"],
     name: "ii – V – I",
-    vibe: "The jazz handshake",
     chords: [
       { numeral: "iim7", semitones: 2, quality: "min7" },
       { numeral: "V7", semitones: 7, quality: "7" },
       { numeral: "Imaj7", semitones: 0, quality: "maj7", beats: 8 },
     ],
-    tip: "Major pentatonic works, but try landing the 3rd of each chord on beat 1 — instant jazz.",
   },
   {
     id: "minor-lift",
     fits: ["minorPent"],
     name: "i – ♭VI – ♭III – ♭VII",
-    vibe: "Epic minor (the other axis)",
     minor: true,
     chords: [
       { numeral: "i", semitones: 0, quality: "min" },
@@ -112,12 +97,10 @@ export const PROGRESSIONS: Progression[] = [
       { numeral: "♭III", semitones: 3, quality: "maj" },
       { numeral: "♭VII", semitones: 10, quality: "maj" },
     ],
-    tip: "Minor pentatonic of the key over all four. Every chord tone of ♭III and ♭VII is in your scale.",
   },
   {
     id: "i-iv-v-min",
     name: "i – iv – v",
-    vibe: "Minor blues, straight up",
     minor: true,
     fits: ["minorPent"],
     chords: [
@@ -125,48 +108,40 @@ export const PROGRESSIONS: Progression[] = [
       { numeral: "iv", semitones: 5, quality: "min" },
       { numeral: "v", semitones: 7, quality: "min" },
     ],
-    tip: "All three chords live inside the minor pentatonic. Lean on the \u266d7 over the iv.",
   },
   {
     id: "dorian-vamp",
     name: "i – IV",
-    vibe: "Dorian vamp (Santana-ish)",
     minor: true,
     fits: ["minorPent"],
     chords: [
       { numeral: "i", semitones: 0, quality: "min7", beats: 8 },
       { numeral: "IV", semitones: 5, quality: "maj", beats: 8 },
     ],
-    tip: "Two chords, endless room. The major IV brightens the \u266d3 \u2014 that rub is the whole sound.",
   },
   {
     id: "i-bvii",
     name: "i – \u266dVII",
-    vibe: "Two-chord rock vamp",
     minor: true,
     fits: ["minorPent"],
     chords: [
       { numeral: "i", semitones: 0, quality: "min", beats: 8 },
       { numeral: "\u266dVII", semitones: 10, quality: "maj", beats: 8 },
     ],
-    tip: "The simplest loop there is. Perfect for drilling box crossings without thinking about changes.",
   },
   {
     id: "i-iv-v",
     name: "I – IV – V",
-    vibe: "Three chords and the truth",
     fits: ["majorPent"],
     chords: [
       { numeral: "I", semitones: 0, quality: "maj", beats: 8 },
       { numeral: "IV", semitones: 5, quality: "maj" },
       { numeral: "V", semitones: 7, quality: "maj" },
     ],
-    tip: "Major pentatonic throughout. Target the 3rd on the I, the root on the IV.",
   },
   {
     id: "i-iii-iv-v",
     name: "I – iii – IV – V",
-    vibe: "Bright and stepping up",
     fits: ["majorPent"],
     chords: [
       { numeral: "I", semitones: 0, quality: "maj" },
@@ -174,18 +149,15 @@ export const PROGRESSIONS: Progression[] = [
       { numeral: "IV", semitones: 5, quality: "maj" },
       { numeral: "V", semitones: 7, quality: "maj" },
     ],
-    tip: "The iii is the relative minor's neighbour \u2014 same pentatonic, different centre of gravity.",
   },
   {
     id: "i-v-min",
     name: "I – V",
-    vibe: "Open two-chord drone",
     fits: ["majorPent"],
     chords: [
       { numeral: "I", semitones: 0, quality: "maj", beats: 8 },
       { numeral: "V", semitones: 7, quality: "maj", beats: 8 },
     ],
-    tip: "Good for hearing how the same five notes recolour against each chord.",
   },
 ];
 

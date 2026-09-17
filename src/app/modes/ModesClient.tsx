@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Fretboard, { FbNote } from "@/components/Fretboard";
-import TipCard from "@/components/TipCard";
 import {
   Chord, NOTES, NoteName, chordName, chordTonePcs, fretNotesFor,
   noteAt, noteIndex, pentatonicBoxes, POSITION_SHAPE,
@@ -353,23 +352,19 @@ export default function ModesClient() {
 
   const drillRunning = phase === "listening" || phase === "answering" || phase === "reveal";
 
-  // ---------- prose bits ----------
-
   const spelling = modeSpelling(root, mode);
   const addedNotes = mode.added.map((d) => ({ d, n: degreeNote(root, mode, d) }));
+  /** Degrees this mode shares with its parent pentatonic — the legend's grey dots. */
+  const parentDegrees = mode.degrees.filter(
+    (d) => !mode.added.includes(d) && d !== "1",
+  );
   const charNote = degreeNote(root, mode, mode.character);
   const relMaj = relativeMajor(root, mode);
   const parentWord = parentLabel(mode);
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-700">Modes</h1>
-        <p className="max-w-prose text-sm text-neutral-600">
-          You already know five sevenths of every mode here. Each one is a pentatonic shape
-          you own with two notes added — not a new scale to memorise.
-        </p>
-      </header>
+      <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-700">Modes</h1>
 
       <div className="flex flex-wrap items-center gap-2">
         <select value={root} onChange={(e) => setParams({ key: e.target.value })}
@@ -377,25 +372,21 @@ export default function ModesClient() {
           {NOTES.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
         <button onClick={() => setLabelDegrees((v) => !v)}
-          className="rounded-lg border border-neutral-300 bg-neutral-100 px-3 py-2 text-sm text-neutral-600">
-          {labelDegrees ? "showing degrees" : "showing notes"}
+          aria-label="labels"
+          className="w-12 rounded-lg border border-neutral-300 bg-neutral-100 py-2 text-center text-sm text-neutral-600">
+          {labelDegrees ? "1" : "A"}
         </button>
         <button onClick={toggleVamp} disabled={drillRunning}
-          className={`ml-auto rounded-full px-4 py-2 text-sm font-bold disabled:opacity-40 ${
+          aria-label="vamp"
+          className={`ml-auto h-11 w-11 rounded-full text-base font-bold disabled:opacity-40 ${
             vamping ? "border border-neutral-400 text-neutral-800" : "bg-amber-400 text-neutral-950 hover:bg-amber-300"
           }`}>
-          {vamping ? "■ stop vamp" : "▶ vamp in this mode"}
+          {vamping ? "■" : "▶"}
         </button>
       </div>
 
       {/* the brightness rail — the only ordering of the modes that explains anything */}
       <section>
-        <div className="mb-2 flex items-baseline justify-between gap-3">
-          <p className="text-xs font-bold uppercase tracking-widest text-neutral-500">
-            Brightest → darkest
-          </p>
-          <p className="text-xs text-neutral-400">each step flattens exactly one more note</p>
-        </div>
         <div className="flex flex-wrap gap-1.5">
           {MODES.map((m, i) => {
             const active = m.id === mode.id;
@@ -404,7 +395,6 @@ export default function ModesClient() {
             const shade = 74 - i * 8;
             return (
               <button key={m.id} onClick={() => setParams({ mode: m.id })} disabled={drillRunning}
-                title={m.vibe}
                 className={`rounded-full border px-3 py-1.5 text-sm disabled:opacity-40 ${
                   active ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-200 text-neutral-600 hover:border-neutral-400"
                 }`}>
@@ -419,7 +409,6 @@ export default function ModesClient() {
 
       {/* the claim, in this key */}
       <section className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-5">
-        <p className="text-xs font-bold uppercase tracking-widest text-neutral-500">{mode.vibe}</p>
         <h2 className="mt-1 flex flex-wrap items-baseline gap-x-2 text-2xl font-bold text-neutral-950">
           {root} {mode.name}
           {mode.alias && <span className="text-base font-normal text-neutral-500">— {mode.alias}</span>}
@@ -447,78 +436,41 @@ export default function ModesClient() {
           <b className="text-neutral-950">{root} {mode.name}</b>
         </p>
 
-        <p className="mt-3 max-w-prose text-neutral-700">{mode.why}</p>
+        <p className="mt-4 border-t border-neutral-200 pt-3 text-lg tabular-nums text-neutral-800">
+          {spelling.join(" ")}
+        </p>
+        <p className="mt-1 text-sm text-neutral-500">= {relMaj} major</p>
 
-        <dl className="mt-4 grid gap-x-6 gap-y-2 border-t border-neutral-200 pt-3 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-neutral-500">The note it lives on</dt>
-            <dd className="text-amber-700">
-              {charNote} — the {mode.character}
-              {mode.dropped && <span className="text-neutral-600"> (and the {mode.dropped} is gone)</span>}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-neutral-500">All seven</dt>
-            <dd className="tabular-nums text-neutral-800">{spelling.join(" ")}</dd>
-          </div>
-          <div>
-            <dt className="text-neutral-500">Where you&apos;ve heard it</dt>
-            <dd className="text-neutral-700">{mode.heard}</dd>
-          </div>
-          <div>
-            <dt className="text-neutral-500">Same notes as</dt>
-            <dd className="text-neutral-600">
-              {relMaj} major — true, and the least useful way to think about it while playing.
-            </dd>
-          </div>
-        </dl>
-
-        {mode.dropped && (
-          <p className="mt-3 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-3 text-sm text-neutral-700">
-            <b className="text-amber-700">The exception.</b>{" "}
-            Locrian is the one mode that isn&apos;t
-            your pentatonic plus two notes — it also takes one away. The {mode.dropped} becomes a{" "}
-            {mode.character} ({charNote}), and a root without a perfect fifth underneath it never
-            quite sounds like home. That is why nobody writes in it, and why it&apos;s worth ten
-            minutes: it shows you what the 5 was doing all along.
-          </p>
-        )}
       </section>
 
       {/* one note apart */}
       {diff && (
         <section className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-bold text-neutral-900">
-                {mode.name} vs {against.name} — one note
-              </p>
-              <p className="mt-0.5 text-sm text-neutral-600">
-                Everything else is identical. The whole difference is{" "}
-                <b className="text-neutral-900">{noteForDegree(root, diff.brighter)}</b> ({diff.brighter})
-                versus <b className="text-neutral-900">{noteForDegree(root, diff.darker)}</b> ({diff.darker}).
-                Play them back to back until you can hear which is which without looking.
-              </p>
-            </div>
-            <button onClick={hearBoth} disabled={drillRunning}
-              className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold disabled:opacity-40 ${
+            <p className="flex flex-wrap items-baseline gap-x-2 text-lg">
+              <b className="text-neutral-900">{noteForDegree(root, diff.brighter)}</b>
+              <span className="text-sm text-neutral-500">({diff.brighter})</span>
+              <span className="text-neutral-400">/</span>
+              <b className="text-neutral-900">{noteForDegree(root, diff.darker)}</b>
+              <span className="text-sm text-neutral-500">({diff.darker})</span>
+            </p>
+            <button onClick={hearBoth} disabled={drillRunning} aria-label="compare"
+              className={`h-11 w-11 shrink-0 rounded-full text-base font-bold disabled:opacity-40 ${
                 auditioning ? "border border-neutral-400 text-neutral-800" : "bg-neutral-900 text-neutral-50 hover:bg-neutral-800"
               }`}>
-              {auditioning ? "■ stop" : "▶ A / B"}
+              {auditioning ? "■" : "▶"}
             </button>
           </div>
           {neighbours.length > 1 && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-3">
-              <span className="text-xs uppercase tracking-widest text-neutral-500">compare with</span>
               {neighbours.map((m) => (
                 <button key={m.id} onClick={() => setAgainstId(m.id)} disabled={drillRunning}
                   className={`rounded-full border px-3 py-1 text-sm disabled:opacity-40 ${
                     m.id === against.id ? "border-neutral-600 text-neutral-900" : "border-neutral-200 text-neutral-500"
                   }`}>
+                  <span className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle"
+                    style={{ background: `hsl(38 92% ${74 - MODES.indexOf(m) * 8}%)` }} aria-hidden />
                   {m.name}
-                  <span className="ml-1 text-xs text-neutral-400">
-                    {MODES.indexOf(m) < MODES.indexOf(mode) ? "brighter" : "darker"}
-                  </span>
                 </button>
               ))}
             </div>
@@ -530,14 +482,12 @@ export default function ModesClient() {
       <section className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-bold text-neutral-900">
-            {pos === 0
-              ? "The whole neck"
-              : `Position ${pos} · ${POSITION_SHAPE[mode.parent][(pos - 1) % 5]}`}
+            {pos === 0 ? "—" : POSITION_SHAPE[mode.parent][(pos - 1) % 5]}
           </h2>
           <div className="flex flex-wrap gap-1.5">
             {[1, 2, 3, 4, 5].map((p) => (
               <button key={p} onClick={() => setParams({ pos: String(p) })} disabled={drillRunning}
-                title={`Position ${p} — ${POSITION_SHAPE[mode.parent][(p - 1) % 5]}`}
+                title={POSITION_SHAPE[mode.parent][(p - 1) % 5]}
                 className={`h-8 w-8 rounded-full border text-sm disabled:opacity-40 ${
                   pos === p ? "border-amber-400 bg-amber-400/15 text-amber-700" : "border-neutral-300 text-neutral-600"
                 }`}>
@@ -548,26 +498,34 @@ export default function ModesClient() {
               className={`h-8 rounded-full border px-3 text-sm disabled:opacity-40 ${
                 pos === 0 ? "border-amber-400 bg-amber-400/15 text-amber-700" : "border-neutral-300 text-neutral-600"
               }`}>
-              all
+              <span aria-label="whole neck">≡</span>
             </button>
           </div>
         </div>
 
-        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-neutral-600">
+        {/* Every swatch is labelled with the degrees it stands for — the legend
+            says what it means without a sentence of explanation. */}
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm tabular-nums text-neutral-700">
           <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-full" style={{ background: COLOR.root }} /> root
+            <span className="h-3 w-3 rounded-full" style={{ background: COLOR.root }} />1
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-3 w-3 rounded-full" style={{ background: COLOR.known }} />
-            already in your {parentWord}
+            {parentDegrees.join(" ")}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-full" style={{ background: COLOR.added }} /> new
+            <span className="h-3 w-3 rounded-full" style={{ background: COLOR.added }} />
+            {mode.added.filter((d) => d !== mode.character).join(" ")}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-3 w-3 rounded-full ring-1 ring-neutral-900" style={{ background: COLOR.character }} />
-            the {mode.character} — the sound
+            {mode.character}
           </span>
+          {mode.dropped && (
+            <span className="flex items-center gap-1.5 text-red-700">
+              <span aria-hidden>−</span>{mode.dropped}
+            </span>
+          )}
         </p>
 
         <Fretboard
@@ -578,30 +536,22 @@ export default function ModesClient() {
         />
 
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={() => hearMode(mode)} disabled={drillRunning}
-            className={`rounded-full px-4 py-2 text-sm font-bold disabled:opacity-40 ${
+          <button onClick={() => hearMode(mode)} disabled={drillRunning} aria-label="play"
+            className={`h-11 w-11 rounded-full text-base font-bold disabled:opacity-40 ${
               auditioning ? "border border-neutral-400 text-neutral-800" : "bg-neutral-900 text-neutral-50 hover:bg-neutral-800"
             }`}>
-            {auditioning ? "■ stop" : `▶ hear ${root} ${mode.name}`}
+            {auditioning ? "■" : "▶"}
           </button>
-          <p className="text-sm text-neutral-500">
-            Drill it as two notes, not seven: play your position {pos || 1} shape and add{" "}
-            {addedNotes.map(({ n }) => n).join(" and ")} wherever they fall. Resolve onto{" "}
-            <b className="text-amber-700">{charNote}</b> instead of the root and the mode announces
-            itself.
+          <p className="text-lg tabular-nums text-neutral-700">
+            {root} {mode.name} <span className="text-neutral-400">·</span>{" "}
+            <b className="text-amber-700">{charNote}</b>
           </p>
         </div>
       </section>
 
       {/* the vamp that holds the mode still */}
       <section className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-4">
-        <p className="text-sm font-bold text-neutral-900">The vamp that holds it still</p>
-        <p className="mt-1 max-w-prose text-sm text-neutral-600">
-          A mode only exists against harmony that agrees with it. Over the wrong chords these
-          seven notes collapse back into {relMaj} major and the colour vanishes — which is why
-          practising modes unaccompanied teaches you nothing.
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {mode.vamp.map((vc, i) => {
             const chord: Chord = {
               root: noteAt(noteIndex(root) + vc.semitones),
@@ -609,16 +559,16 @@ export default function ModesClient() {
             };
             return (
               <button key={i} onClick={() => { audioCtx(); strumChord(voicing(chord)); }}
-                title={`${vc.numeral} — tap to hear`}
+                title={vc.numeral}
                 className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-bold text-neutral-800 hover:border-amber-400/60 hover:text-amber-700">
                 {chordName(chord)}
                 <span className="ml-1.5 text-xs font-normal text-neutral-500">{vc.numeral}</span>
               </button>
             );
           })}
-          <button onClick={toggleVamp} disabled={drillRunning}
-            className="ml-auto text-sm text-neutral-500 hover:text-amber-700 disabled:opacity-40">
-            {vamping ? "■ stop the loop" : "loop it →"}
+          <button onClick={toggleVamp} disabled={drillRunning} aria-label="loop"
+            className="ml-auto text-base text-neutral-500 hover:text-amber-700 disabled:opacity-40">
+            {vamping ? "■" : "▶"}
           </button>
         </div>
       </section>
@@ -629,46 +579,41 @@ export default function ModesClient() {
       }`}>
         {phase === "idle" && (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-bold text-neutral-900">Colour drill</p>
-                <p className="max-w-prose text-sm text-neutral-600">
-                  {REPS} rounds. You hear one octave over a bare root drone — no third, no
-                  fifth, nothing to give it away — and name it: {mode.name} or {against.name}.
-                  One note separates them.
-                </p>
-              </div>
-              <button onClick={startDrill}
-                className="rounded-full bg-amber-400 px-5 py-2 text-sm font-bold text-neutral-950 hover:bg-amber-300">
-                Start drill →
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <p className="text-lg font-bold text-neutral-900">
+                {mode.name} <span className="font-normal text-neutral-400">/</span> {against.name}
+              </p>
+              <p className="tabular-nums text-neutral-500">
+                {REPS}<span aria-hidden>×</span>
+                <span className="ml-3 text-neutral-700">{bpm}</span>
+                <span className="ml-1 text-xs uppercase tracking-widest text-neutral-500">bpm</span>
+              </p>
+              <button onClick={startDrill} aria-label="start"
+                className="ml-auto h-12 w-12 rounded-full bg-amber-400 text-xl font-bold text-neutral-950 hover:bg-amber-300">
+                ▶
               </button>
             </div>
-            <p className="mt-3 border-t border-neutral-200 pt-3 text-xs text-neutral-500">
-              This is the one drill the app can actually mark for you — you either named it or you
-              didn&apos;t, and there is nothing to be honest about. {PASS_PCT}% clears it; two clears
-              in a row and the vamp speeds up, which leaves you less time to decide.
-            </p>
           </>
         )}
 
         {drillRunning && (
           <div>
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-700">
-                Round {rep} of {REPS} · {hits} right · {bpm} BPM
+              <p className="text-sm font-bold tabular-nums text-amber-700">
+                {rep}/{REPS} <span className="text-neutral-400">·</span> {hits}
+                <span aria-hidden>✓</span> <span className="text-neutral-400">·</span> {bpm}
+                <span className="ml-1 text-xs uppercase tracking-widest text-neutral-500">bpm</span>
               </p>
-              <button onClick={abortDrill} className="text-xs text-neutral-500 hover:text-neutral-700">
-                stop
-              </button>
+              <button onClick={abortDrill} aria-label="stop"
+                className="text-sm text-neutral-500 hover:text-neutral-700">✕</button>
             </div>
 
             {phase === "listening" && (
-              <p className="mt-3 text-lg font-bold text-neutral-950">Listening…</p>
+              <p aria-label="listening" className="mt-3 animate-pulse text-3xl leading-none text-amber-700">♪</p>
             )}
 
             {phase !== "listening" && (
               <>
-                <p className="mt-3 text-lg font-bold text-neutral-950">Which one was that?</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {[mode, against].map((m) => {
                     const chosen = guess === m.id;
@@ -687,26 +632,21 @@ export default function ModesClient() {
                     );
                   })}
                   {phase === "answering" && (
-                    <button onClick={replay}
-                      className="rounded-full px-4 py-2 text-sm text-neutral-500 hover:text-neutral-700">
-                      ↻ again
+                    <button onClick={replay} aria-label="replay"
+                      className="rounded-full px-4 py-2 text-base text-neutral-500 hover:text-neutral-700">
+                      ↻
                     </button>
                   )}
                 </div>
-                {phase === "reveal" && diff && (
-                  <p className="mt-3 text-sm text-neutral-700">
-                    {guess === asked ? (
-                      <span className="text-emerald-700">Right — {modeById(asked!).name}.</span>
-                    ) : (
-                      <span className="text-red-700">
-                        That was {modeById(asked!).name}.
-                      </span>
-                    )}{" "}
-                    Listen for the {modeById(asked!).character}:{" "}
+                {phase === "reveal" && asked && (
+                  <p className="mt-3 flex items-baseline gap-2 text-lg">
+                    <span aria-hidden className={guess === asked ? "text-emerald-700" : "text-red-700"}>
+                      {guess === asked ? "✓" : "✕"}
+                    </span>
                     <b className="text-neutral-900">
-                      {degreeNote(root, modeById(asked!), modeById(asked!).character)}
+                      {degreeNote(root, modeById(asked), modeById(asked).character)}
                     </b>
-                    .
+                    <span className="text-sm text-neutral-500">({modeById(asked).character})</span>
                   </p>
                 )}
               </>
@@ -716,29 +656,28 @@ export default function ModesClient() {
 
         {phase === "done" && outcome && (
           <div>
-            <p className="text-lg font-bold text-neutral-950">
-              {outcome.pct}% — {outcome.hits} of {REPS} named at {bpm} BPM.
-            </p>
-            <p className="mt-1 max-w-prose text-neutral-700">
-              {outcome.delta > 0
-                ? `Two clean rounds in a row. Next session runs at ${bpm + outcome.delta} BPM — less time per note, less time to think.`
-                : outcome.delta < 0
-                  ? `Dropping to ${bpm + outcome.delta} BPM next session. Slower is easier to hear, and hearing it is the point.`
-                  : outcome.pct >= PASS_PCT
-                    ? `Cleared ${PASS_PCT}%. Hold it once more and the tempo goes up.`
-                    : outcome.pct <= 55
-                      ? `That's a coin flip — you're guessing, not hearing. Go back to A/B above and play the pair twenty times before trying again.`
-                      : `${PASS_PCT}% is the bar. The ${mode.character} is the note to listen for.`}
-            </p>
-            <button onClick={() => { setPhase("idle"); setOutcome(null); }}
-              className="mt-3 rounded-full border border-neutral-400 px-5 py-2 text-sm text-neutral-800 hover:border-neutral-600">
-              Again
-            </button>
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 tabular-nums">
+              <span className={`text-4xl font-bold ${outcome.pct >= PASS_PCT ? "text-emerald-700" : "text-neutral-900"}`}>
+                {outcome.pct}%
+              </span>
+              <span className="text-neutral-500">{outcome.hits}/{REPS}</span>
+              {/* Where the ladder moved next session's tempo. */}
+              <span className="text-neutral-700">
+                {bpm + outcome.delta}
+                <span className="ml-1 text-xs uppercase tracking-widest text-neutral-500">bpm</span>
+                <span aria-hidden className={outcome.delta > 0 ? "ml-1 text-emerald-700" : outcome.delta < 0 ? "ml-1 text-amber-700" : "ml-1 text-neutral-400"}>
+                  {outcome.delta > 0 ? "↑" : outcome.delta < 0 ? "↓" : "="}
+                </span>
+              </span>
+              <button onClick={() => { setPhase("idle"); setOutcome(null); }} aria-label="again"
+                className="ml-auto h-11 w-11 rounded-full border border-neutral-400 text-base text-neutral-800 hover:border-neutral-600">
+                ↻
+              </button>
+            </div>
           </div>
         )}
       </section>
 
-      <TipCard room="modes" ctx={{ root, kind: mode.parent, mode, position: pos || 1 }} label="Mode tip" />
     </div>
   );
 }

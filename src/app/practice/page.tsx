@@ -4,13 +4,12 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import Fretboard, { FbNote } from "@/components/Fretboard";
 import ChordDiagram from "@/components/ChordDiagram";
 import {
-  NOTES, NoteName, ScaleKind, chordName, chordTonePcs, lickTip,
+  NOTES, NoteName, ScaleKind, SCALE_LABEL, chordName, chordTonePcs,
   noteAt, noteIndex, pentatonicBoxes, POSITION_SHAPE,
 } from "@/lib/theory";
 import { PROGRESSIONS, realize } from "@/lib/progressions";
 import { Metronome, audioCtx, click, pluck, strumChord } from "@/lib/audio";
 import { DRILL_BASE_BPM, logDrill, subscribe, tempoFor } from "@/lib/store";
-import TipCard from "@/components/TipCard";
 
 export default function PracticePage() {
   const met = useRef<Metronome | null>(null);
@@ -132,16 +131,13 @@ export default function PracticePage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-700">Practice</h1>
-        <p className="text-sm text-neutral-600">Chords + licks together. Strum the changes, then answer them with the scale below.</p>
-      </header>
+      <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-700">Practice</h1>
 
       <div className="flex flex-wrap items-center gap-2">
         <select value={progId} onChange={(e) => { setProgId(e.target.value); setChordIdx(0); }}
           className="min-w-0 flex-1 rounded-lg border border-neutral-300 bg-neutral-100 px-3 py-2 text-sm">
           {PROGRESSIONS.map((p) => (
-            <option key={p.id} value={p.id}>{p.name} — {p.vibe}</option>
+            <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
         <select value={key} onChange={(e) => { setKey(e.target.value as NoteName); setChordIdx(0); }}
@@ -169,9 +165,9 @@ export default function PracticePage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={toggle}
-          className={`rounded-full px-6 py-2.5 font-bold ${running ? "bg-neutral-900 text-neutral-50" : "bg-amber-400 text-neutral-950 hover:bg-amber-300"}`}>
-          {running ? "■ stop" : "▶ play backing"}
+        <button onClick={toggle} aria-label="play"
+          className={`h-12 w-12 rounded-full text-xl font-bold ${running ? "bg-neutral-900 text-neutral-50" : "bg-amber-400 text-neutral-950 hover:bg-amber-300"}`}>
+          {running ? "■" : "▶"}
         </button>
         <div className="flex items-center gap-2 text-sm text-neutral-600">
           <button onClick={() => setBpm((b) => Math.max(40, b - 5))} className="h-9 w-9 rounded-full border border-neutral-300">−</button>
@@ -180,15 +176,12 @@ export default function PracticePage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-4 text-sm">
-        <p className="text-neutral-700">{prog.tip}</p>
-      </div>
-
       {/* lick zone */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-bold text-neutral-900">
-            Lick zone — {key} {scaleKind === "minorPent" ? "minor" : "major"} pentatonic, Position {box} ({POSITION_SHAPE[scaleKind][(box - 1) % 5]})
+            {key} {SCALE_LABEL[scaleKind]}{" "}
+            <span className="font-normal text-neutral-500">· {POSITION_SHAPE[scaleKind][(box - 1) % 5]}</span>
           </h2>
           <div className="flex gap-1.5">
             {[1, 2, 3, 4, 5].map((b) => (
@@ -200,38 +193,31 @@ export default function PracticePage() {
             ))}
           </div>
         </div>
-        <p className="text-sm text-neutral-600">
-          Gold = chord tones of <b className="text-amber-700">{chordName(activeChord.chord)}</b> (safe landings, root ringed white). Grey = passing notes.{" "}
-          {lickTip(activeChord.chord, key, scaleKind)}
+        {/* The swatch is labelled with the chord it belongs to — no sentence needed. */}
+        <p className="flex items-center gap-2 text-sm text-neutral-700">
+          <span className="h-3 w-3 rounded-full ring-1 ring-neutral-900" style={{ background: "#fbbf24" }} />
+          <b className="text-amber-700">{chordName(activeChord.chord)}</b>
         </p>
         <Fretboard notes={fbNotes} maxFret={maxFret} />
-        <p className="text-xs text-neutral-500">
-          The drill: strum the chord once when it changes, then fill the rest of the bar with a 3–4 note lick that lands on a gold note as the next chord hits. Switch positions each round — that&apos;s your horizontal practice sneaking in.
-        </p>
       </div>
 
       {logged && (
         <div className={`rounded-2xl border p-4 text-sm ${logged.cycles >= 4 ? "border-emerald-300 bg-emerald-50" : "border-neutral-200 bg-neutral-100/50"}`}>
-          <p className="font-bold text-neutral-950">
-            Run logged — {logged.cycles} times through at {bpm} BPM.
-          </p>
-          <p className="mt-1 text-neutral-700">
-            {logged.delta > 0
-              ? `Two solid runs in a row. Next session goes to ${bpm + logged.delta} BPM.`
-              : logged.delta < 0
-                ? `Dropping to ${bpm + logged.delta} BPM next session — slowing down is the drill working.`
-                : logged.cycles >= 4
-                  ? "Four times round holds the changes. Once more and the tempo goes up."
-                  : "Four times round is the bar. Stay here until the changes are automatic."}
-          </p>
+          <div className="flex flex-wrap items-baseline gap-x-4 tabular-nums">
+            <span className={`text-3xl font-bold ${logged.cycles >= 4 ? "text-emerald-700" : "text-neutral-900"}`}>
+              {logged.cycles}<span aria-hidden className="text-lg font-normal text-neutral-500">×</span>
+            </span>
+            <span className="text-neutral-700">
+              {bpm + logged.delta}
+              <span className="ml-1 text-xs uppercase tracking-widest text-neutral-500">bpm</span>
+              <span aria-hidden className={`ml-1 ${logged.delta > 0 ? "text-emerald-700" : logged.delta < 0 ? "text-amber-700" : "text-neutral-400"}`}>
+                {logged.delta > 0 ? "↑" : logged.delta < 0 ? "↓" : "="}
+              </span>
+            </span>
+          </div>
         </div>
       )}
 
-      <TipCard
-        room="practice"
-        ctx={{ root: key, kind: scaleKind, chord: activeChord.chord, position: box }}
-        label="Chord tip"
-      />
     </div>
   );
 }

@@ -42,9 +42,6 @@ export const POSITION_SHAPE: Record<ScaleKind, string[]> = {
   majorPent: ["E shape", "D shape", "C shape", "A shape", "G shape"],
 };
 
-/** "Position 2 · Dm shape" */
-export const positionLabel = (kind: ScaleKind, box: number) =>
-  `Position ${box} \u00b7 ${POSITION_SHAPE[kind][(box - 1) % 5]}`;
 
 export const noteIndex = (n: NoteName) => NOTES.indexOf(n);
 export const noteAt = (i: number): NoteName => NOTES[((i % 12) + 12) % 12];
@@ -278,14 +275,3 @@ export function chordShape(c: Chord): ChordShape {
   return { frets, base: barre, label: `${chordName(c)} (barre ${barre})` };
 }
 
-/** For a chord in a key: which pentatonic scale/degree tips to show. */
-export function lickTip(c: Chord, scaleRoot: NoteName, kind: ScaleKind): string {
-  const tones = chordTonePcs(c);
-  const rootPc = noteIndex(scaleRoot);
-  const inScale = SCALE_INTERVALS[kind]
-    .map((iv, i) => ({ pc: (rootPc + iv) % 12, deg: SCALE_DEGREES[kind][i] }))
-    .filter((n) => tones.includes(n.pc));
-  if (inScale.length === 0) return `Land on ${c.root} — it sits outside the pentatonic, treat it as color.`;
-  const names = inScale.map((n) => `${noteAt(n.pc)} (${n.deg})`).join(", ");
-  return `Target: ${names}`;
-}
