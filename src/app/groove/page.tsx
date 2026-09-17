@@ -151,58 +151,59 @@ export default function GroovePage() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-400">Groove</h1>
-        <p className="text-sm text-neutral-400">Count it in your head. Tap it with your foot. Then make the guitar do it.</p>
+        <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-700">Groove</h1>
+        <p className="text-sm text-neutral-600">Count it in your head. Tap it with your foot. Then make the guitar do it.</p>
       </header>
 
       {song && (
-        <div className="rounded-2xl border border-emerald-700/50 bg-emerald-900/20 p-4 text-sm">
-          <p className="font-bold text-emerald-300">Find the tempo of “{song.song}” — {song.artist}</p>
-          <p className="mt-1 text-neutral-300">
+        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm">
+          <p className="font-bold text-emerald-700">Find the tempo of “{song.song}” — {song.artist}</p>
+          <p className="mt-1 text-neutral-700">
             Play it in Spotify, then hit <em>tap tempo</em> below on every beat until the BPM settles. Then start the metronome and strum along.
           </p>
         </div>
       )}
 
       {/* tab switcher */}
-      <div className="flex overflow-hidden rounded-xl border border-neutral-800 text-sm">
+      <div className="flex overflow-hidden rounded-xl border border-neutral-200 text-sm">
         {(["metronome", "tap", "strum"] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 py-2.5 capitalize ${tab === t ? "bg-amber-400/15 text-amber-300" : "bg-neutral-900 text-neutral-400"}`}>
+            className={`flex-1 py-2.5 capitalize ${tab === t ? "bg-amber-400/15 text-amber-700" : "bg-neutral-100 text-neutral-600"}`}>
             {t === "tap" ? "tap trainer" : t === "strum" ? "strumming" : t}
           </button>
         ))}
       </div>
 
       {/* BPM control */}
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4">
+      <div className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-4">
         <div className="flex items-center justify-between">
           <button onClick={() => setBpm((b) => Math.max(30, b - 5))}
-            className="h-12 w-12 rounded-full border border-neutral-700 text-xl">−</button>
+            className="h-12 w-12 rounded-full border border-neutral-300 text-xl">−</button>
           <div className="text-center">
-            <div className="text-5xl font-bold tabular-nums text-neutral-50">{bpm}</div>
+            <div className="text-5xl font-bold tabular-nums text-neutral-950">{bpm}</div>
             <div className="text-xs uppercase tracking-widest text-neutral-500">bpm</div>
           </div>
           <button onClick={() => setBpm((b) => Math.min(240, b + 5))}
-            className="h-12 w-12 rounded-full border border-neutral-700 text-xl">+</button>
+            className="h-12 w-12 rounded-full border border-neutral-300 text-xl">+</button>
         </div>
         <input type="range" min={30} max={240} value={bpm}
           onChange={(e) => setBpm(+e.target.value)}
-          className="mt-3 w-full accent-amber-400" />
+          style={{ "--fill": `${((bpm - 30) / 210) * 100}%` } as React.CSSProperties}
+          className="mt-3 w-full" />
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button onClick={toggle}
-            className={`rounded-full px-6 py-2.5 font-bold ${running ? "bg-neutral-200 text-neutral-950" : "bg-amber-400 text-neutral-950 hover:bg-amber-300"}`}>
+            className={`rounded-full px-6 py-2.5 font-bold ${running ? "bg-neutral-900 text-neutral-50" : "bg-amber-400 text-neutral-950 hover:bg-amber-300"}`}>
             {running ? "■ stop" : "▶ start"}
           </button>
           <button onClick={tapTempo}
-            className="rounded-full border border-neutral-700 px-4 py-2.5 text-sm text-neutral-300">
+            className="rounded-full border border-neutral-300 px-4 py-2.5 text-sm text-neutral-700">
             tap tempo{song?.bpm ? ` (song ≈ ${song.bpm})` : ""}
           </button>
           {tab === "metronome" && (
-            <div className="ml-auto flex overflow-hidden rounded-lg border border-neutral-700 text-xs">
+            <div className="ml-auto flex overflow-hidden rounded-lg border border-neutral-300 text-xs">
               {[{ v: 1, l: "♩" }, { v: 2, l: "♪♪" }, { v: 3, l: "3s" }, { v: 4, l: "16s" }].map((o) => (
                 <button key={o.v} onClick={() => setSubs(o.v)}
-                  className={`px-3 py-2 ${subs === o.v ? "bg-amber-400/20 text-amber-300" : "bg-neutral-900 text-neutral-400"}`}>
+                  className={`px-3 py-2 ${subs === o.v ? "bg-amber-400/20 text-amber-700" : "bg-neutral-100 text-neutral-600"}`}>
                   {o.l}
                 </button>
               ))}
@@ -219,11 +220,11 @@ export default function GroovePage() {
                   ? label === "1" || (i === 0)
                     ? "scale-105 bg-amber-400 text-neutral-950"
                     : /^[1-4]$/.test(label)
-                      ? "scale-105 bg-neutral-200 text-neutral-950"
-                      : "scale-105 bg-neutral-500 text-neutral-950"
+                      ? "scale-105 bg-neutral-900 text-neutral-50"
+                      : "scale-105 bg-neutral-500 text-neutral-50"
                   : /^[1-4]$/.test(label)
-                    ? "bg-neutral-800 text-neutral-300"
-                    : "bg-neutral-900 text-neutral-600"
+                    ? "bg-neutral-200 text-neutral-700"
+                    : "bg-neutral-100 text-neutral-400"
               }`}>
               {label}
             </div>
@@ -236,20 +237,20 @@ export default function GroovePage() {
           <button
             onPointerDown={registerTap}
             disabled={!running}
-            className="h-44 w-full rounded-3xl border-2 border-dashed border-neutral-700 text-xl font-bold text-neutral-400 active:border-amber-400 active:bg-amber-400/10 active:text-amber-300 disabled:opacity-40">
+            className="h-44 w-full rounded-3xl border-2 border-dashed border-neutral-300 text-xl font-bold text-neutral-600 active:border-amber-400 active:bg-amber-400/10 active:text-amber-700 disabled:opacity-40">
             {running ? "TAP ON EVERY BEAT" : "start the metronome first"}
             {lastOffset !== null && (
-              <div className={`mt-2 text-3xl tabular-nums ${Math.abs(lastOffset) < 25 ? "text-emerald-400" : Math.abs(lastOffset) < 60 ? "text-amber-400" : "text-red-400"}`}>
+              <div className={`mt-2 text-3xl tabular-nums ${Math.abs(lastOffset) < 25 ? "text-emerald-700" : Math.abs(lastOffset) < 60 ? "text-amber-700" : "text-red-700"}`}>
                 {lastOffset > 0 ? "+" : ""}{Math.round(lastOffset)} ms
               </div>
             )}
           </button>
           {logged && (
-            <div className={`rounded-2xl border p-4 text-sm ${logged.ms < 25 ? "border-emerald-700/60 bg-emerald-950/25" : "border-neutral-800 bg-neutral-900/50"}`}>
-              <p className="font-bold text-neutral-50">
+            <div className={`rounded-2xl border p-4 text-sm ${logged.ms < 25 ? "border-emerald-300 bg-emerald-50" : "border-neutral-200 bg-neutral-100/50"}`}>
+              <p className="font-bold text-neutral-950">
                 Run logged — {logged.ms} ms average at {bpm} BPM.
               </p>
-              <p className="mt-1 text-neutral-300">
+              <p className="mt-1 text-neutral-700">
                 {logged.delta > 0
                   ? `Two clean runs in a row. Next session goes to ${bpm + logged.delta} BPM.`
                   : logged.delta < 0
@@ -261,17 +262,17 @@ export default function GroovePage() {
             </div>
           )}
           {meanAbs !== null && meanSigned !== null && taps.length >= 4 && (
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 text-sm">
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-4 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-neutral-400">last {taps.length} taps</span>
-                <span className="font-bold text-amber-300">{grade}</span>
+                <span className="text-neutral-600">last {taps.length} taps</span>
+                <span className="font-bold text-amber-700">{grade}</span>
               </div>
-              <p className="mt-1 text-neutral-300">
+              <p className="mt-1 text-neutral-700">
                 avg miss <b className="tabular-nums">{Math.round(meanAbs)} ms</b> · tendency:{" "}
                 <b>{meanSigned > 12 ? "dragging (late)" : meanSigned < -12 ? "rushing (early)" : "centered"}</b>
               </p>
               {/* dot strip */}
-              <div className="relative mt-3 h-8 rounded bg-neutral-800">
+              <div className="relative mt-3 h-8 rounded bg-neutral-200">
                 <div className="absolute inset-y-0 left-1/2 w-px bg-neutral-500" />
                 {taps.map((t, i) => (
                   <div key={i}
@@ -286,11 +287,11 @@ export default function GroovePage() {
               <p className="mt-2 text-xs text-neutral-500">early ← center = perfect → late</p>
             </div>
           )}
-          <p className="text-sm text-neutral-400">
+          <p className="text-sm text-neutral-600">
             Tap the pad (or spacebar) on every click. Stop the metronome to log the run — eight taps minimum, or it isn’t a measurement. Under 25 ms average clears the Stage 1 gate.
           </p>
           <button onClick={() => setMuteClick((v) => !v)}
-            className={`rounded-full border px-4 py-2 text-sm ${muteClick ? "border-amber-400 text-amber-300" : "border-neutral-700 text-neutral-400"}`}>
+            className={`rounded-full border px-4 py-2 text-sm ${muteClick ? "border-amber-400 text-amber-700" : "border-neutral-300 text-neutral-600"}`}>
             {muteClick ? "subdivisions muted — beats only" : "mute subdivisions"}
           </button>
         </div>
@@ -301,21 +302,21 @@ export default function GroovePage() {
           <div className="flex flex-wrap gap-2">
             {STRUM_PATTERNS.map((p) => (
               <button key={p.id} onClick={() => setPatternId(p.id)}
-                className={`rounded-full border px-3 py-1.5 text-sm ${patternId === p.id ? "border-amber-400 bg-amber-400/15 text-amber-300" : "border-neutral-700 text-neutral-400"}`}>
+                className={`rounded-full border px-3 py-1.5 text-sm ${patternId === p.id ? "border-amber-400 bg-amber-400/15 text-amber-700" : "border-neutral-300 text-neutral-600"}`}>
                 {p.name} {"·".repeat(p.level)}
               </button>
             ))}
           </div>
 
           {/* pattern arrows on the 8th grid */}
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4">
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-4">
             <div className="flex gap-1.5">
               {pattern.slots.map((slot, i) => (
                 <div key={i} className="flex flex-1 flex-col items-center gap-1">
                   <div
                     className={`flex h-16 w-full items-center justify-center rounded-lg text-2xl font-bold transition-all duration-75 ${
                       running && pos === i ? "bg-amber-400 text-neutral-950" :
-                      slot.stroke ? "bg-neutral-800 text-neutral-100" : "bg-neutral-900 text-neutral-700"
+                      slot.stroke ? "bg-neutral-200 text-neutral-900" : "bg-neutral-100 text-neutral-300"
                     } ${slot.accent && !(running && pos === i) ? "ring-2 ring-amber-400/60" : ""}`}>
                     {slot.stroke === "D" ? "↓" : slot.stroke === "U" ? "↑" : "·"}
                   </div>
@@ -323,7 +324,7 @@ export default function GroovePage() {
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-sm text-neutral-300">{pattern.hint}</p>
+            <p className="mt-3 text-sm text-neutral-700">{pattern.hint}</p>
             <p className="mt-1 text-xs text-neutral-500">
               Ringed slots are accents — dig in. Your arm moves on every slot, even the dots. Downstrokes sound fuller, ups lighter: that&apos;s the built-in dynamics.
             </p>
@@ -332,7 +333,7 @@ export default function GroovePage() {
       )}
 
       {tab === "metronome" && (
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-neutral-600">
           Daily dose: 2 minutes at 60 BPM just counting out loud, foot on the beats. Then switch to ♪♪ and say “1 & 2 &…” — the & is where your upstrums live.
         </p>
       )}

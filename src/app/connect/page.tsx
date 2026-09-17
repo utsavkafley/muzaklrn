@@ -8,7 +8,7 @@ export default function ConnectPage() {
     <Suspense
       fallback={
         <div className="space-y-5">
-          <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-400">Connect</h1>
+          <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-700">Connect</h1>
           <p className="text-sm text-neutral-500">Loading the neck…</p>
         </div>
       }

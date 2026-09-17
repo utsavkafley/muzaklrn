@@ -76,30 +76,30 @@ export default function TodayPage() {
     <div className="space-y-8">
       <header className="flex items-end justify-between gap-4">
         <div>
-          <h1 className="font-[family-name:var(--font-caveat)] text-5xl text-amber-400">muzaklrn</h1>
-          <p className="mt-1 text-neutral-400">
+          <h1 className="font-[family-name:var(--font-caveat)] text-5xl text-amber-700">muzaklrn</h1>
+          <p className="mt-1 text-neutral-600">
             {greeting && `${greeting}. `}Guitar over doomscroll — you&apos;re already here.
           </p>
         </div>
         {days > 0 && (
           <div className="shrink-0 text-right">
-            <div className="text-3xl font-bold tabular-nums text-neutral-50">{days}🔥</div>
+            <div className="text-3xl font-bold tabular-nums text-neutral-950">{days}🔥</div>
             <div className="text-xs uppercase tracking-widest text-neutral-500">day streak</div>
           </div>
         )}
       </header>
 
       {/* where you are in the curriculum */}
-      <section className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4">
+      <section className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <p className="font-bold text-neutral-50">
+          <p className="font-bold text-neutral-950">
             Stage {info.n} · {info.name}
           </p>
           <p className="text-xs uppercase tracking-widest text-neutral-500">{info.weeks}</p>
         </div>
-        <p className="mt-1 text-sm text-neutral-400">{info.focus}</p>
-        <p className="mt-2 text-sm text-neutral-300">
-          <span className="text-amber-300">Gate:</span> {info.gate}
+        <p className="mt-1 text-sm text-neutral-600">{info.focus}</p>
+        <p className="mt-2 text-sm text-neutral-700">
+          <span className="text-amber-700">Gate:</span> {info.gate}
           {gateBest && <span className="text-neutral-500"> · best this week: {gateBest}</span>}
         </p>
       </section>
@@ -114,19 +114,19 @@ export default function TodayPage() {
                 className={`h-1.5 rounded-full transition-all ${
                   done.includes(s.drill) ? "w-6 bg-amber-400"
                     : i === stepIdx ? "w-6 bg-amber-400/40"
-                    : "w-1.5 bg-neutral-700"
+                    : "w-1.5 bg-neutral-300"
                 }`} />
             ))}
           </div>
         </div>
 
         {step ? (
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-6">
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-6">
             <p className="text-xs uppercase tracking-widest text-neutral-500">
               Step {stepIdx + 1} of {SESSION.length} · {step.mins}
             </p>
-            <h3 className="mt-2 text-2xl font-bold text-neutral-50">{step.title}</h3>
-            <p className="mt-2 max-w-prose text-neutral-300">
+            <h3 className="mt-2 text-2xl font-bold text-neutral-950">{step.title}</h3>
+            <p className="mt-2 max-w-prose text-neutral-700">
               {step.blurb(tempos[step.drill] ?? 70)}
             </p>
             <div className="mt-5 flex items-center gap-4">
@@ -135,17 +135,17 @@ export default function TodayPage() {
                 Start {step.title} →
               </Link>
               <button onClick={() => setSkipped((s) => [...s, step.drill])}
-                className="text-sm text-neutral-500 hover:text-neutral-300">
+                className="text-sm text-neutral-500 hover:text-neutral-700">
                 skip
               </button>
             </div>
           </div>
         ) : (
-          <div className="rounded-2xl border border-emerald-800/60 bg-emerald-950/20 p-6">
-            <h3 className="text-2xl font-bold text-neutral-50">
+          <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-6">
+            <h3 className="text-2xl font-bold text-neutral-950">
               {doneCount === SESSION.length ? "Session done." : "Nothing left queued."}
             </h3>
-            <p className="mt-2 text-neutral-300">
+            <p className="mt-2 text-neutral-700">
               {doneCount !== SESSION.length
                 ? "You skipped the rest. Pick a room, or put the session back."
                 : colourDone
@@ -156,10 +156,10 @@ export default function TodayPage() {
             {/* The encore sits outside the three dots on purpose: it is ears, not
                 fingers, and the session should still count on a day you skip it. */}
             {doneCount === SESSION.length && !colourDone && (
-              <div className="mt-5 rounded-xl border border-neutral-800 bg-neutral-950/60 p-4">
+              <div className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50/60 p-4">
                 <p className="text-xs uppercase tracking-widest text-neutral-500">Encore · optional · 5 min</p>
-                <h4 className="mt-1 font-bold text-neutral-50">Colour</h4>
-                <p className="mt-1 max-w-prose text-sm text-neutral-300">
+                <h4 className="mt-1 font-bold text-neutral-950">Colour</h4>
+                <p className="mt-1 max-w-prose text-sm text-neutral-700">
                   Six rounds of naming a mode by ear against a bare root drone. It is the only
                   drill here the app can mark for you — you either heard the note or you didn&apos;t.
                 </p>
@@ -172,16 +172,16 @@ export default function TodayPage() {
 
             <div className="mt-5 flex items-center gap-4">
               <Link href="/listen"
-                className="rounded-full border border-neutral-600 px-6 py-2.5 text-neutral-200 hover:border-neutral-400">
+                className="rounded-full border border-neutral-400 px-6 py-2.5 text-neutral-800 hover:border-neutral-600">
                 Free play →
               </Link>
               {doneCount === SESSION.length && colourDone && (
-                <Link href="/modes" className="text-sm text-neutral-500 hover:text-neutral-300">
+                <Link href="/modes" className="text-sm text-neutral-500 hover:text-neutral-700">
                   modes →
                 </Link>
               )}
               {skipped.length > 0 && (
-                <button onClick={() => setSkipped([])} className="text-sm text-neutral-500 hover:text-neutral-300">
+                <button onClick={() => setSkipped([])} className="text-sm text-neutral-500 hover:text-neutral-700">
                   un-skip
                 </button>
               )}
@@ -192,39 +192,39 @@ export default function TodayPage() {
 
       {/* today's repertoire */}
       {song && (
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-5">
+        <section className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-5">
           <p className="text-xs font-bold uppercase tracking-widest text-neutral-500">
             Today&apos;s repertoire · 5 min
           </p>
-          <h3 className="mt-1.5 text-xl font-bold text-neutral-50">
+          <h3 className="mt-1.5 text-xl font-bold text-neutral-950">
             {song.title} <span className="font-normal text-neutral-500">— {song.artist}</span>
           </h3>
-          <p className="mt-1 text-sm text-amber-300">
+          <p className="mt-1 text-sm text-amber-700">
             {song.excerpt} · {song.key} {song.kind === "minorPent" ? "minor" : "major"} pentatonic · {song.bpm} BPM
           </p>
-          <p className="mt-2 max-w-prose text-sm text-neutral-400">{song.why}</p>
+          <p className="mt-2 max-w-prose text-sm text-neutral-600">{song.why}</p>
           <div className="mt-3 flex flex-wrap gap-4 text-sm">
             <a href={ytSearchUrl(`${song.artist} ${song.title} lesson`)} target="_blank" rel="noreferrer"
-              className="text-amber-400/80 hover:text-amber-400">lesson ↗</a>
+              className="text-amber-700/80 hover:text-amber-700">lesson ↗</a>
             <a href={ugSearchUrl(`${song.artist} ${song.title}`)} target="_blank" rel="noreferrer"
-              className="text-amber-400/80 hover:text-amber-400">tab ↗</a>
+              className="text-amber-700/80 hover:text-amber-700">tab ↗</a>
             <Link href={`/connect?key=${encodeURIComponent(song.key)}&scale=${song.kind === "minorPent" ? "minor" : "major"}`}
-              className="text-neutral-500 hover:text-neutral-300">the neck in {song.key} →</Link>
+              className="text-neutral-500 hover:text-neutral-700">the neck in {song.key} →</Link>
           </div>
         </section>
       )}
 
       {tidbit && (
-        <section className="border-t border-neutral-900 pt-6">
+        <section className="border-t border-neutral-100 pt-6">
           <div className="flex items-center gap-3">
             <p className="text-xs font-bold uppercase tracking-widest text-neutral-500">Theory tidbit</p>
             <button onClick={() => setTidbitIdx((i) => ((i ?? 0) + 1) % TIDBITS.length)}
-              className="text-xs text-neutral-600 hover:text-amber-400">
+              className="text-xs text-neutral-400 hover:text-amber-700">
               another →
             </button>
           </div>
-          <h3 className="mt-1.5 font-bold text-neutral-100">{tidbit.title}</h3>
-          <p className="mt-1 max-w-prose text-sm text-neutral-400">{tidbit.body}</p>
+          <h3 className="mt-1.5 font-bold text-neutral-900">{tidbit.title}</h3>
+          <p className="mt-1 max-w-prose text-sm text-neutral-600">{tidbit.body}</p>
         </section>
       )}
     </div>

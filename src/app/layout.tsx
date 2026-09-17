@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: "#fafaf9",
   width: "device-width",
   initialScale: 1,
 };
@@ -20,7 +20,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${quicksand.variable} ${caveat.variable}`}>
-      <body className="bg-neutral-950 font-[family-name:var(--font-quicksand)] text-neutral-100 antialiased">
+      <body className="bg-neutral-50 font-[family-name:var(--font-quicksand)] text-neutral-900 antialiased">
         <Nav />
         <main className="mx-auto max-w-4xl px-4 pt-6 pb-24 md:pt-20 md:pb-10">{children}</main>
       </body>

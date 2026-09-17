@@ -27,18 +27,18 @@ export default function TipCard({ room, ctx, label = "Tip" }: Props) {
   return (
     <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-4">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-xs font-bold uppercase tracking-widest text-amber-400/90">{label}</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-amber-700/90">{label}</p>
         {tips.length > 1 && (
           <button
             onClick={() => setNudge((n) => n + 1)}
-            className="text-xs text-neutral-500 hover:text-amber-400"
+            className="text-xs text-neutral-500 hover:text-amber-700"
           >
             another →
           </button>
         )}
       </div>
-      <h3 className="mt-1.5 font-bold text-neutral-50">{tip.title}</h3>
-      <p className="mt-1 max-w-prose text-sm text-neutral-300">{tip.body}</p>
+      <h3 className="mt-1.5 font-bold text-neutral-950">{tip.title}</h3>
+      <p className="mt-1 max-w-prose text-sm text-neutral-700">{tip.body}</p>
     </section>
   );
 }

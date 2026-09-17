@@ -58,7 +58,7 @@ export default function Keyboard({
   };
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-neutral-800 bg-neutral-950/60 p-2">
+    <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-neutral-50/60 p-2">
       <svg width={W} height={H} className="block">
         {whiteKeys.map((k) => {
           const n = byMidi.get(k.midi);
@@ -66,7 +66,7 @@ export default function Keyboard({
             <g key={`w${k.midi}`} className="cursor-pointer" onClick={() => press(k.midi)}>
               <rect x={k.x} y={0} width={WKW - 1.5} height={WKH} rx={5}
                 fill={n ? n.fill : "#f5f5f4"} opacity={n?.dim ? 0.5 : 1}
-                stroke={n?.ring ?? "#a3a3a3"} strokeWidth={n?.ring ? 3 : 1} />
+                stroke={n?.ring ?? "#9b9ba3"} strokeWidth={n?.ring ? 3 : 1} />
               {n && (
                 <text x={k.x + (WKW - 1.5) / 2} y={WKH - 14} textAnchor="middle" fontSize={11} fontWeight={700} fill="#0a0a0a">
                   {n.label}

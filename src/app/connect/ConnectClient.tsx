@@ -187,7 +187,7 @@ export default function ConnectClient() {
           string: n.string,
           fret: n.fret,
           label: labelDegrees ? n.degree : noteAt(n.pc),
-          fill: n.isRoot ? "#ffffff" : BOX_COLORS[(n.box - 1) % 5],
+          fill: n.isRoot ? "#18181b" : BOX_COLORS[(n.box - 1) % 5],
         }));
     }
 
@@ -207,9 +207,9 @@ export default function ConnectClient() {
         fret: n.fret,
         label: labelDegrees ? n.degree : noteAt(n.pc),
         fill:
-          isTarget && reveal ? "#ffffff"
-          : piv && reveal ? "#ffffff"
-          : n.isRoot ? "#fca5a5"
+          isTarget && reveal ? "#18181b"
+          : piv && reveal ? "#18181b"
+          : n.isRoot ? "#e11d48"
           : BOX_COLORS[(n.box - 1) % 5],
         ring: isTarget && reveal ? "#34d399" : piv && reveal ? "#fbbf24" : undefined,
         dim: routeHidden ? true : !here,
@@ -332,44 +332,44 @@ export default function ConnectClient() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-400">Connect</h1>
-        <p className="text-sm text-neutral-400">
+        <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-700">Connect</h1>
+        <p className="text-sm text-neutral-600">
           You know all five positions. The neck is one scale — these are the seams.
         </p>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
         <select value={root} onChange={(e) => setParams({ key: e.target.value })}
-          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm">
+          className="rounded-lg border border-neutral-300 bg-neutral-100 px-3 py-2 text-sm">
           {NOTES.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
-        <div className="flex overflow-hidden rounded-lg border border-neutral-700 text-sm">
+        <div className="flex overflow-hidden rounded-lg border border-neutral-300 text-sm">
           {(["minor", "major"] as const).map((k) => (
             <button key={k} onClick={() => setParams({ scale: k })}
-              className={`px-3 py-2 ${scaleWord === k ? "bg-amber-400/20 text-amber-300" : "bg-neutral-900 text-neutral-400"}`}>
+              className={`px-3 py-2 ${scaleWord === k ? "bg-amber-400/20 text-amber-700" : "bg-neutral-100 text-neutral-600"}`}>
               {k}
             </button>
           ))}
         </div>
-        <div className="flex overflow-hidden rounded-lg border border-neutral-700 text-sm">
+        <div className="flex overflow-hidden rounded-lg border border-neutral-300 text-sm">
           {(["map", "connect"] as Mode[]).map((md) => (
             <button key={md} onClick={() => setParams({ mode: md })}
-              className={`px-3 py-2 ${mode === md ? "bg-amber-400/20 text-amber-300" : "bg-neutral-900 text-neutral-400"}`}>
+              className={`px-3 py-2 ${mode === md ? "bg-amber-400/20 text-amber-700" : "bg-neutral-100 text-neutral-600"}`}>
               {md === "map" ? "full map" : "connect"}
             </button>
           ))}
         </div>
         <button onClick={() => setLabelDegrees((v) => !v)}
-          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-400">
+          className="rounded-lg border border-neutral-300 bg-neutral-100 px-3 py-2 text-sm text-neutral-600">
           {labelDegrees ? "showing degrees" : "showing notes"}
         </button>
       </div>
 
-      <p className="text-sm text-neutral-300">
-        <span className="text-amber-300">{root} {SCALE_LABEL[kind]}</span>
+      <p className="text-sm text-neutral-700">
+        <span className="text-amber-700">{root} {SCALE_LABEL[kind]}</span>
         {mode === "connect" && (
           <> — Position {pair} ({shapeOf(pair)}) into Position {upper} ({shapeOf(upper)})
-          {pair === 5 && <span className="text-amber-300/80"> — the wrap, where the numbering starts over</span>}. Gold-ringed white
+          {pair === 5 && <span className="text-amber-700/80"> — the wrap, where the numbering starts over</span>}. Gold-ringed white
           notes are shared by both: slide through them and the position change disappears.</>
         )}
         {mode === "map" && <> — all five positions across the full neck. Roots are white.</>}
@@ -384,7 +384,7 @@ export default function ConnectClient() {
                 if (nv.has(b)) nv.delete(b); else nv.add(b);
                 return nv.size ? nv : new Set([b]);
               })}
-              className={`rounded-full border px-3 py-1.5 text-sm ${visible.has(b) ? "border-transparent text-neutral-950" : "border-neutral-700 text-neutral-500"}`}
+              className={`rounded-full border px-3 py-1.5 text-sm ${visible.has(b) ? "border-transparent text-neutral-950" : "border-neutral-300 text-neutral-500"}`}
               style={visible.has(b) ? { background: BOX_COLORS[b - 1] } : {}}>
               {b} · {shapeOf(b)}
             </button>
@@ -395,25 +395,25 @@ export default function ConnectClient() {
           {[1, 2, 3, 4, 5].map((p) => (
             <button key={p} onClick={() => setParams({ pos: String(p) })} disabled={drillRunning}
               title={`${shapeOf(p)} into ${shapeOf(p === 5 ? 1 : p + 1)}`}
-              className={`rounded-full border px-3 py-1.5 text-sm disabled:opacity-40 ${pair === p ? "border-amber-400 bg-amber-400/15 text-amber-300" : "border-neutral-700 text-neutral-400"}`}>
+              className={`rounded-full border px-3 py-1.5 text-sm disabled:opacity-40 ${pair === p ? "border-amber-400 bg-amber-400/15 text-amber-700" : "border-neutral-300 text-neutral-600"}`}>
               {p} ↔ {p === 5 ? "1" : p + 1}{p === 5 && <span className="text-xs text-neutral-500"> wrap</span>}
             </button>
           ))}
           <button onClick={playRun} disabled={drillRunning}
-            className={`ml-auto rounded-full px-4 py-1.5 text-sm font-bold disabled:opacity-40 ${playing ? "border border-neutral-600 text-neutral-200" : "bg-amber-400 text-neutral-950 hover:bg-amber-300"}`}>
+            className={`ml-auto rounded-full px-4 py-1.5 text-sm font-bold disabled:opacity-40 ${playing ? "border border-neutral-400 text-neutral-800" : "bg-amber-400 text-neutral-950 hover:bg-amber-300"}`}>
             {playing ? "■ stop" : "▶ hear the crossing"}
           </button>
         </div>
       )}
 
       {mode === "connect" && (
-        <section className={`rounded-2xl border p-4 ${drillRunning ? "border-amber-400/50 bg-amber-400/[0.06]" : "border-neutral-800 bg-neutral-900/50"}`}>
+        <section className={`rounded-2xl border p-4 ${drillRunning ? "border-amber-400/50 bg-amber-400/[0.06]" : "border-neutral-200 bg-neutral-100/50"}`}>
           {phase === "idle" && (
             <>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="font-bold text-neutral-100">Seam drill</p>
-                  <p className="text-sm text-neutral-400">
+                  <p className="font-bold text-neutral-900">Seam drill</p>
+                  <p className="text-sm text-neutral-600">
                     {REPS} crossings at {bpm} BPM. The route shows for one bar, then hides — you play it from memory.
                   </p>
                 </div>
@@ -422,7 +422,7 @@ export default function ConnectClient() {
                   Start drill →
                 </button>
               </div>
-              <p className="mt-3 border-t border-neutral-800 pt-3 text-xs text-neutral-500">
+              <p className="mt-3 border-t border-neutral-200 pt-3 text-xs text-neutral-500">
                 You mark your own hits for now — the app can&apos;t hear you yet. Be honest; the
                 tempo ladder is only as useful as what you tell it.
               </p>
@@ -432,21 +432,21 @@ export default function ConnectClient() {
           {drillRunning && prompt && (
             <div>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-bold uppercase tracking-widest text-amber-400">
+                <p className="text-xs font-bold uppercase tracking-widest text-amber-700">
                   Rep {rep} of {REPS} · {bpm} BPM
                 </p>
-                <button onClick={abortDrill} className="text-xs text-neutral-500 hover:text-neutral-300">
+                <button onClick={abortDrill} className="text-xs text-neutral-500 hover:text-neutral-700">
                   stop
                 </button>
               </div>
-              <p className="mt-2 text-lg font-bold text-neutral-50">
+              <p className="mt-2 text-lg font-bold text-neutral-950">
                 Position {pair} → {upper}, cross on the {STRING_NAME[prompt.crossString]} string.
               </p>
-              <p className="mt-1 text-neutral-300">
-                Land on <b className="text-emerald-400">{noteAt(prompt.target.pc)}</b>{" "}
+              <p className="mt-1 text-neutral-700">
+                Land on <b className="text-emerald-700">{noteAt(prompt.target.pc)}</b>{" "}
                 (fret {prompt.target.fret}, {STRING_NAME[prompt.target.string]}) on beat 1 of bar 2.
               </p>
-              <p className="mt-2 text-sm text-amber-300/90">
+              <p className="mt-2 text-sm text-amber-700/90">
                 {phase === "showing" ? "Route shown — memorise it." : "Route hidden. Play it."}
               </p>
               {phase === "marking" && (
@@ -456,7 +456,7 @@ export default function ConnectClient() {
                     Landed it
                   </button>
                   <button onClick={() => mark(false)}
-                    className="rounded-full border border-neutral-600 px-5 py-2 text-sm text-neutral-200 hover:border-neutral-400">
+                    className="rounded-full border border-neutral-400 px-5 py-2 text-sm text-neutral-800 hover:border-neutral-600">
                     Missed
                   </button>
                 </div>
@@ -466,10 +466,10 @@ export default function ConnectClient() {
 
           {phase === "done" && outcome && (
             <div>
-              <p className="text-lg font-bold text-neutral-50">
+              <p className="text-lg font-bold text-neutral-950">
                 {outcome.pct}% — {outcome.hits} of {REPS} landed at {bpm} BPM.
               </p>
-              <p className="mt-1 text-neutral-300">
+              <p className="mt-1 text-neutral-700">
                 {outcome.delta > 0
                   ? `Two clean runs in a row. Next session goes to ${bpm + outcome.delta} BPM.`
                   : outcome.delta < 0
@@ -479,7 +479,7 @@ export default function ConnectClient() {
                       : `${PASS_PCT}% is the bar. Stay at this tempo until the seam is automatic.`}
               </p>
               <button onClick={() => { setPhase("idle"); setOutcome(null); }}
-                className="mt-3 rounded-full border border-neutral-600 px-5 py-2 text-sm text-neutral-200 hover:border-neutral-400">
+                className="mt-3 rounded-full border border-neutral-400 px-5 py-2 text-sm text-neutral-800 hover:border-neutral-600">
                 Again
               </button>
             </div>
@@ -489,36 +489,36 @@ export default function ConnectClient() {
 
       <Fretboard notes={notes} maxFret={MAX_FRET} activeNote={activeNote} onNoteClick={flashNote} />
 
-      <section className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4">
+      <section className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-4">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-bold text-neutral-100">
+          <p className="text-sm font-bold text-neutral-900">
             Chords that work over {root} {SCALE_LABEL[kind]}
           </p>
           <button onClick={() => setShuffled(sample(pool, 3))}
-            className="text-xs text-neutral-500 hover:text-amber-400">
+            className="text-xs text-neutral-500 hover:text-amber-700">
             shuffle →
           </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {picks.map((p) => (
-            <div key={p.id} className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-3">
-              <p className="text-sm font-bold text-amber-300">{p.name}</p>
+            <div key={p.id} className="rounded-xl border border-neutral-200 bg-neutral-50/50 p-3">
+              <p className="text-sm font-bold text-amber-700">{p.name}</p>
               <p className="text-xs text-neutral-500">{p.vibe}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {realize(p, root).map((pc, i) => (
                   <button key={`${pc.numeral}-${i}`}
                     onClick={() => { audioCtx(); strumChord(voicing(pc.chord)); }}
                     title={`${pc.numeral} — tap to hear`}
-                    className="rounded-md border border-neutral-700 px-2 py-1 text-xs font-bold text-neutral-200 hover:border-amber-400/60 hover:text-amber-300">
+                    className="rounded-md border border-neutral-300 px-2 py-1 text-xs font-bold text-neutral-800 hover:border-amber-400/60 hover:text-amber-700">
                     {chordName(pc.chord)}
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-xs text-neutral-400">{p.tip}</p>
+              <p className="mt-2 text-xs text-neutral-600">{p.tip}</p>
             </div>
           ))}
           {picks.length === 0 && (
-            <p className="text-xs text-neutral-600">
+            <p className="text-xs text-neutral-400">
               {PROGRESSIONS.length ? "Loading…" : "No progressions available."}
             </p>
           )}

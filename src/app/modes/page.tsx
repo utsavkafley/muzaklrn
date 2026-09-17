@@ -8,7 +8,7 @@ export default function ModesPage() {
     <Suspense
       fallback={
         <div className="space-y-5">
-          <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-400">Modes</h1>
+          <h1 className="font-[family-name:var(--font-caveat)] text-4xl text-amber-700">Modes</h1>
           <p className="text-sm text-neutral-500">Tuning up…</p>
         </div>
       }
