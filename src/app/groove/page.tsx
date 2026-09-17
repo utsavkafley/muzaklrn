@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Metronome, audioCtx, click, strumNoise } from "@/lib/audio";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { audioCtx } from "@/lib/audio";
 import { STRUM_PATTERNS, COUNT_LABELS, patternGlyphs } from "@/lib/strums";
 import { logDrill, takePendingSong, tempoFor } from "@/lib/store";
+import {
+  grooveServerState, grooveState, grooveTapOffset, isGrooveRunning, setGrooveBpm,
+  setGrooveMute, setGrooveSlots, setGrooveSubs, setGrooveUi, startGroove, stopGroove,
+  subscribeGroove,
+} from "@/lib/transport";
 
 type Tab = "metronome" | "tap" | "strum";
 
@@ -12,17 +17,17 @@ interface TapStat {
 }
 
 export default function GroovePage() {
-  const met = useRef<Metronome | null>(null);
-  if (!met.current) met.current = new Metronome();
-  const m = met.current;
+  // The clock is the app's, not this page's — it keeps running when you leave.
+  // Everything about it is read from the transport rather than mirrored here,
+  // so coming back to this room shows a live groove exactly as it is.
+  const groove = useSyncExternalStore(subscribeGroove, grooveState, grooveServerState);
+  const { running, bpm, subsPerBeat: subs, muteOffbeats: muteClick } = groove;
+  const setBpm = (f: number | ((b: number) => number)) =>
+    setGrooveBpm(typeof f === "function" ? f(bpm) : f);
 
   const [tab, setTab] = useState<Tab>("metronome");
-  const [bpm, setBpm] = useState(90);
   const [logged, setLogged] = useState<{ ms: number; delta: number } | null>(null);
-  const [subs, setSubs] = useState(1);
-  const [running, setRunning] = useState(false);
   const [pos, setPos] = useState(-1); // current sub within bar for UI
-  const [muteClick, setMuteClick] = useState(false);
 
   // tap trainer
   const [taps, setTaps] = useState<TapStat[]>([]);
@@ -36,89 +41,88 @@ export default function GroovePage() {
   const [patternId, setPatternId] = useState(STRUM_PATTERNS[1].id);
   const pattern = useMemo(() => STRUM_PATTERNS.find((p) => p.id === patternId)!, [patternId]);
 
-  const stateRef = useRef({ tab, muteClick, pattern });
-  stateRef.current = { tab, muteClick, pattern };
+  const PASS_MS = 25; // the Stage 1 gate
+  const MIN_TAPS = 8; // below this it isn't a measurement
 
   useEffect(() => {
     // No logging on mount — opening a page is not practice. The Clock drill
-    // logs itself when a scored run ends, further down in `toggle`.
-    setBpm(tempoFor("clock"));
+    // logs itself when a scored run ends, in the transition effect below.
+    // A groove already running keeps its own tempo; only a stopped clock gets
+    // reset to the ladder's.
+    if (!isGrooveRunning()) setGrooveBpm(tempoFor("clock"));
     // Read the deep link straight off the URL rather than via useSearchParams,
     // which would force a Suspense boundary on this prerendered route.
     const t = new URLSearchParams(window.location.search).get("tab");
     if (t === "tap" || t === "strum" || t === "metronome") setTab(t);
     const pending = takePendingSong();
     if (pending) setSong(pending); // guard: StrictMode runs effects twice and the take is destructive
-    return () => m.stop();
-  }, [m]);
+    // Claim the beat display while this room is open, and hand it back on the
+    // way out — the clock plays on without anything to draw to.
+    setGrooveUi(setPos);
+    return () => setGrooveUi(null);
+  }, []);
 
-  useEffect(() => { m.bpm = bpm; }, [bpm, m]);
-  useEffect(() => { m.subsPerBeat = subs; }, [subs, m]);
+  // The strum tab drives the pattern; the others are a plain click.
+  useEffect(() => {
+    setGrooveSlots(tab === "strum" ? pattern.slots : null);
+  }, [tab, pattern]);
 
-  m.onTick = (t) => {
-    const { tab: tb, muteClick: mc, pattern: pat } = stateRef.current;
-    const isBeat = t.sub % t.subsPerBeat === 0;
-    const beat = Math.floor(t.sub / t.subsPerBeat);
-    if (tb === "strum") {
-      // strum tab always runs on 8ths grid
-      const slot = pat.slots[t.sub % 8];
-      if (slot?.stroke) strumNoise(t.when, slot.stroke === "U", slot.accent);
-      if (isBeat && !mc) click(t.when, beat === 0, 0.5);
-    } else {
-      if (!mc || isBeat) click(t.when, t.sub === 0, isBeat ? 1 : 0.45);
-    }
-    const delay = Math.max(0, (t.when - audioCtx().currentTime) * 1000);
-    setTimeout(() => setPos(t.sub), delay);
-  };
+  /**
+   * Log the run whenever the clock stops, whoever stopped it — the ■ button
+   * here, or the spacebar from anywhere in the app.
+   */
+  // What the run looked like, for handlers that fire outside render.
+  const runRef = useRef({ tab, taps, bpm });
+  useEffect(() => { runRef.current = { tab, taps, bpm }; }, [tab, taps, bpm]);
 
-  const PASS_MS = 25; // the Stage 1 gate
-  const MIN_TAPS = 8; // below this it isn't a measurement
-
-  const toggle = () => {
-    if (running) {
-      m.stop();
-      setRunning(false);
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && !running) {
       setPos(-1);
+      const { tab: tb, taps: ts, bpm: at } = runRef.current;
       // A completed run is the only thing that counts as practice.
-      if (tab === "tap" && taps.length >= MIN_TAPS) {
-        const ms = taps.reduce((a, t) => a + Math.abs(t.offset), 0) / taps.length;
+      if (tb === "tap" && ts.length >= MIN_TAPS) {
+        const ms = ts.reduce((a, t) => a + Math.abs(t.offset), 0) / ts.length;
         const { tempoChanged } = logDrill({
           drill: "clock", value: Math.round(ms), unit: "ms",
-          tempo: bpm, passed: ms < PASS_MS,
+          tempo: at, passed: ms < PASS_MS,
         });
         setLogged({ ms: Math.round(ms), delta: tempoChanged });
       }
+    }
+    wasRunning.current = running;
+  }, [running]);
+
+  const toggle = () => {
+    if (running) {
+      stopGroove();
     } else {
       setLogged(null);
-      audioCtx();
-      m.subsPerBeat = tab === "strum" ? 2 : subs;
-      m.start();
-      setRunning(true);
       setTaps([]);
       setLastOffset(null);
+      startGroove();
     }
   };
 
-  // switching tabs restarts subdivision appropriately
-  useEffect(() => {
-    m.subsPerBeat = tab === "strum" ? 2 : subs;
-  }, [tab, subs, m]);
-
   const registerTap = () => {
     if (!running) return;
-    const off = m.tapOffset(audioCtx().currentTime);
+    const off = grooveTapOffset(audioCtx().currentTime);
     if (off === null || Math.abs(off) > 250) return;
     setLastOffset(off);
     setTaps((ts) => [...ts.slice(-15), { offset: off }]);
   };
 
-  // spacebar taps too
+  // F and J tap too — index fingers on the home row, and clear of the spacebar,
+  // which now stops the groove from anywhere in the app.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.code === "Space" && stateRef.current.tab === "tap") {
-        e.preventDefault();
-        registerTap();
-      }
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      // By key, not code — F and J are wherever the layout puts them.
+      const k = e.key.toLowerCase();
+      if (k !== "f" && k !== "j") return;
+      if (runRef.current.tab !== "tap") return;
+      e.preventDefault();
+      registerTap();
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -193,7 +197,7 @@ export default function GroovePage() {
           {tab === "metronome" && (
             <div className="ml-auto flex overflow-hidden rounded-lg border border-neutral-300 text-xs">
               {[1, 2, 3, 4].map((v) => (
-                <button key={v} onClick={() => setSubs(v)}
+                <button key={v} onClick={() => setGrooveSubs(v)}
                   className={`px-3 py-2 tabular-nums ${subs === v ? "bg-amber-400/20 text-amber-700" : "bg-neutral-100 text-neutral-600"}`}>
                   <span aria-hidden>×</span>{v}
                 </button>
@@ -278,7 +282,7 @@ export default function GroovePage() {
               <p aria-hidden className="mt-2 flex justify-between text-xs text-neutral-400"><span>←</span><span>·</span><span>→</span></p>
             </div>
           )}
-          <button onClick={() => setMuteClick((v) => !v)}
+          <button onClick={() => setGrooveMute(!muteClick)}
             className={`rounded-full border px-4 py-2 text-base ${muteClick ? "border-amber-400 text-amber-700" : "border-neutral-300 text-neutral-600"}`}>
             <span aria-label="mute subdivisions">{muteClick ? "♩" : "♩♪"}</span>
           </button>

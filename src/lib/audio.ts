@@ -10,8 +10,13 @@ export function audioCtx(): AudioContext {
 
 export const midiToFreq = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
+/** A sounding voice you can cut short (e.g. stopping a scheduled run). */
+export interface Voice {
+  stop: (when?: number) => void;
+}
+
 /** Short click. accent=true gives the "1". */
-export function click(when: number, accent = false, gain = 1) {
+export function click(when: number, accent = false, gain = 1): Voice {
   const ac = audioCtx();
   const osc = ac.createOscillator();
   const g = ac.createGain();
@@ -22,11 +27,29 @@ export function click(when: number, accent = false, gain = 1) {
   osc.connect(g).connect(ac.destination);
   osc.start(when);
   osc.stop(when + 0.1);
+  return silencer(g, () => osc.stop());
 }
 
-/** A sounding voice you can cut short (e.g. stopping a scheduled run). */
-export interface Voice {
-  stop: (when?: number) => void;
+/**
+ * A stop handle for a scheduled one-shot. Anything already committed to the
+ * audio graph keeps its appointment unless something cancels it, and the
+ * metronome now schedules seconds ahead — so a stop has to reach into the
+ * future and cut what has not sounded yet.
+ */
+function silencer(g: GainNode, kill: () => void): Voice {
+  return {
+    stop(when?: number) {
+      const ac = audioCtx();
+      const at = Math.max(when ?? ac.currentTime, ac.currentTime);
+      try {
+        g.gain.cancelScheduledValues(at);
+        g.gain.setValueAtTime(0.0001, at);
+        kill();
+      } catch {
+        /* already finished */
+      }
+    },
+  };
 }
 
 /** Guitar-ish pluck: triangle osc through a closing lowpass. */
@@ -88,7 +111,7 @@ export function strumChord(midis: number[], when?: number, vol = 0.35, up = fals
 }
 
 /** Percussive strum for rhythm practice: filtered noise burst. Down = fuller, up = lighter. */
-export function strumNoise(when: number, up: boolean, accent = false) {
+export function strumNoise(when: number, up: boolean, accent = false): Voice {
   const ac = audioCtx();
   const len = 0.09;
   const buf = ac.createBuffer(1, ac.sampleRate * len, ac.sampleRate);
@@ -104,6 +127,7 @@ export function strumNoise(when: number, up: boolean, accent = false) {
   g.gain.value = (up ? 0.25 : 0.45) * (accent ? 1.7 : 1);
   src.connect(bp).connect(g).connect(ac.destination);
   src.start(when);
+  return silencer(g, () => src.stop());
 }
 
 // ---------- Scheduler ----------
@@ -131,11 +155,22 @@ export class Metronome {
   private timer: ReturnType<typeof setInterval> | null = null;
   private nextTime = 0;
   private count = 0;
+  private onVisibility: (() => void) | null = null;
   onTick: ((t: Tick) => void) | null = null;
   /** recent + upcoming BEAT times, for tap scoring */
   beatTimes: number[] = [];
 
   get running() { return this.timer !== null; }
+
+  /**
+   * How far ahead to schedule. A hidden tab clamps setInterval to about a
+   * second, so one pump has to cover more than that or the click stutters and
+   * then dies the moment you switch away. While visible, stay tight: a tempo
+   * change should be audible immediately rather than after a buffer drains.
+   */
+  private get horizon() {
+    return typeof document !== "undefined" && document.hidden ? 1.5 : 0.12;
+  }
 
   start() {
     const ac = audioCtx();
@@ -144,18 +179,29 @@ export class Metronome {
     this.beatTimes = [];
     this.nextTime = ac.currentTime + 0.15;
     this.timer = setInterval(() => this.pump(), 25);
+    // Fill the buffer the instant the tab hides, before throttling starts —
+    // waiting for the next tick would already be too late.
+    if (typeof document !== "undefined") {
+      this.onVisibility = () => { if (this.timer) this.pump(); };
+      document.addEventListener("visibilitychange", this.onVisibility);
+    }
     this.pump();
   }
 
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.onVisibility && typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.onVisibility);
+    }
+    this.onVisibility = null;
   }
 
   private pump() {
     const ac = audioCtx();
     const secPerSub = 60 / this.bpm / this.subsPerBeat;
-    while (this.nextTime < ac.currentTime + 0.12) {
+    const until = ac.currentTime + this.horizon;
+    while (this.nextTime < until) {
       const subsPerBar = this.beatsPerBar * this.subsPerBeat;
       const tick: Tick = {
         sub: this.count % subsPerBar,
