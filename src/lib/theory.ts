@@ -66,11 +66,18 @@ export interface FretNote {
   isRoot: boolean;
 }
 
-/** All notes of a scale on the fretboard within [0, maxFret]. */
-export function scaleNotes(root: NoteName, kind: ScaleKind, maxFret = 22): FretNote[] {
+/**
+ * Every fret carrying one of `intervals` (semitones from the root), labelled
+ * with the matching entry of `degrees`. Works for any scale size — the
+ * pentatonics below and the seven-note modes in `modes.ts` share it.
+ */
+export function fretNotesFor(
+  root: NoteName,
+  intervals: number[],
+  degrees: string[],
+  maxFret = 22,
+): FretNote[] {
   const rootPc = noteIndex(root);
-  const intervals = SCALE_INTERVALS[kind];
-  const degrees = SCALE_DEGREES[kind];
   const out: FretNote[] = [];
   for (let s = 0; s < 6; s++) {
     for (let f = 0; f <= maxFret; f++) {
@@ -81,6 +88,11 @@ export function scaleNotes(root: NoteName, kind: ScaleKind, maxFret = 22): FretN
     }
   }
   return out;
+}
+
+/** All notes of a pentatonic scale on the fretboard within [0, maxFret]. */
+export function scaleNotes(root: NoteName, kind: ScaleKind, maxFret = 22): FretNote[] {
+  return fretNotesFor(root, SCALE_INTERVALS[kind], SCALE_DEGREES[kind], maxFret);
 }
 
 export interface BoxNote extends FretNote {

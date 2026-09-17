@@ -230,7 +230,7 @@ export const STAGES: Stage[] = [
     gate: "Average timing miss under 25 ms at 80 BPM." },
   { n: 2, name: "Horizontal", weeks: "Weeks 7–16", focus: "All five positions linked, including 5↔1 across the octave.",
     gate: "Land the called target 8 times out of 10." },
-  { n: 3, name: "Chords and Licks", weeks: "Weeks 17–30", focus: "Triads through the changes, embellishment, looper craft.",
+  { n: 3, name: "Chords and Licks", weeks: "Weeks 17–30", focus: "Triads through the changes, modal colour, looper craft.",
     gate: "A four-bar loop with no audible seam." },
   { n: 4, name: "The Set", weeks: "Weeks 31–52", focus: "Repertoire from memory, dynamics, playing with the drummer.",
     gate: "Six to eight songs end to end." },

@@ -5,21 +5,23 @@
 // streak you can farm by tapping tabs trains tab-tapping, so there is
 // deliberately no way to log anything without a measured result.
 
-export type Room = "connect" | "groove" | "practice" | "listen" | "piano";
+export type Room = "connect" | "groove" | "practice" | "listen" | "piano" | "modes";
 
 /** The measurable drills. Anything not in here cannot be logged. */
-export type DrillId = "clock" | "seam" | "changes";
+export type DrillId = "clock" | "seam" | "changes" | "colour";
 
 export const DRILL_ROOM: Record<DrillId, Room> = {
   clock: "groove",
   seam: "connect",
   changes: "practice",
+  colour: "modes",
 };
 
 export const DRILL_LABEL: Record<DrillId, string> = {
   clock: "Clock",
   seam: "The Seam",
   changes: "Changes",
+  colour: "Colour",
 };
 
 /** Starting tempo for each drill, before the ladder moves it. */
@@ -27,6 +29,9 @@ export const DRILL_BASE_BPM: Record<DrillId, number> = {
   clock: 70,
   seam: 70,
   changes: 80,
+  // Colour is an ear test, not a fingers test. The vamp starts slow because
+  // the difficulty is hearing one note, not playing anything.
+  colour: 60,
 };
 
 export interface DrillResult {

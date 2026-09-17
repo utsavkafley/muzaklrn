@@ -37,6 +37,7 @@ const SESSION: Step[] = [
 
 export default function TodayPage() {
   const [done, setDone] = useState<DrillId[]>([]);
+  const [colourDone, setColourDone] = useState(false);
   const [skipped, setSkipped] = useState<DrillId[]>([]);
   const [days, setDays] = useState(0);
   const [greeting, setGreeting] = useState("");
@@ -48,6 +49,7 @@ export default function TodayPage() {
 
   useEffect(() => {
     setDone(SESSION.map((s) => s.drill).filter(didDrillToday));
+    setColourDone(didDrillToday("colour"));
     setDays(streak());
     const st = readStage();
     setStage(st);
@@ -144,15 +146,40 @@ export default function TodayPage() {
               {doneCount === SESSION.length ? "Session done." : "Nothing left queued."}
             </h3>
             <p className="mt-2 text-neutral-300">
-              {doneCount === SESSION.length
-                ? "Rhythm, seams, and application — all three logged. Now the part that isn't scored."
-                : "You skipped the rest. Pick a room, or put the session back."}
+              {doneCount !== SESSION.length
+                ? "You skipped the rest. Pick a room, or put the session back."
+                : colourDone
+                  ? "Rhythm, seams, application — and the encore. Everything scored today is in the log."
+                  : "Rhythm, seams, and application — all three logged. One optional thing left, then the part that isn't scored."}
             </p>
+
+            {/* The encore sits outside the three dots on purpose: it is ears, not
+                fingers, and the session should still count on a day you skip it. */}
+            {doneCount === SESSION.length && !colourDone && (
+              <div className="mt-5 rounded-xl border border-neutral-800 bg-neutral-950/60 p-4">
+                <p className="text-xs uppercase tracking-widest text-neutral-500">Encore · optional · 5 min</p>
+                <h4 className="mt-1 font-bold text-neutral-50">Colour</h4>
+                <p className="mt-1 max-w-prose text-sm text-neutral-300">
+                  Six rounds of naming a mode by ear against a bare root drone. It is the only
+                  drill here the app can mark for you — you either heard the note or you didn&apos;t.
+                </p>
+                <Link href="/modes"
+                  className="mt-3 inline-block rounded-full bg-amber-400 px-5 py-2 text-sm font-bold text-neutral-950 hover:bg-amber-300">
+                  Start Colour →
+                </Link>
+              </div>
+            )}
+
             <div className="mt-5 flex items-center gap-4">
               <Link href="/listen"
                 className="rounded-full border border-neutral-600 px-6 py-2.5 text-neutral-200 hover:border-neutral-400">
                 Free play →
               </Link>
+              {doneCount === SESSION.length && colourDone && (
+                <Link href="/modes" className="text-sm text-neutral-500 hover:text-neutral-300">
+                  modes →
+                </Link>
+              )}
               {skipped.length > 0 && (
                 <button onClick={() => setSkipped([])} className="text-sm text-neutral-500 hover:text-neutral-300">
                   un-skip

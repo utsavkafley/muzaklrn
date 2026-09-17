@@ -8,6 +8,7 @@ const TABS = [
   { href: "/groove", label: "Groove", icon: "◉" },
   { href: "/connect", label: "Connect", icon: "⌁" },
   { href: "/practice", label: "Practice", icon: "♩" },
+  { href: "/modes", label: "Modes", icon: "◐" },
 ];
 
 export default function Nav() {

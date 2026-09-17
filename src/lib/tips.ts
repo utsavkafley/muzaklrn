@@ -8,19 +8,25 @@ import {
   Chord, NoteName, ScaleKind, SCALE_DEGREES, SCALE_INTERVALS, POSITION_SHAPE,
   chordName, chordTonePcs, noteAt, noteIndex,
 } from "./theory";
+import {
+  Mode, brighterThan, darkerThan, degreeNote, modeSpelling, oneNoteApart,
+  parentLabel, relativeMajor,
+} from "./modes";
 
 export interface Tip {
   title: string;
   body: string;
 }
 
-export type TipRoom = "connect" | "practice" | "groove" | "piano";
+export type TipRoom = "connect" | "practice" | "groove" | "piano" | "modes";
 
 export interface TipContext {
   root: NoteName;
   kind: ScaleKind;
   chord?: Chord;
   position?: number;
+  /** Set in the Modes room; `kind` is then the mode's parent pentatonic. */
+  mode?: Mode;
 }
 
 /** Note names of the scale, in degree order. */
@@ -173,6 +179,56 @@ function pianoTips(ctx: TipContext): Tip[] {
   ];
 }
 
+function modeTips(ctx: TipContext): Tip[] {
+  const { root, mode, position = 1 } = ctx;
+  if (!mode) return [];
+  const parent = parentLabel(mode);
+  const added = mode.added.map((d) => degreeNote(root, mode, d));
+  const character = degreeNote(root, mode, mode.character);
+  const shape = POSITION_SHAPE[mode.parent][(position - 1) % 5];
+  const out: Tip[] = [
+    {
+      title: "Two notes, not seven",
+      body: `${root} ${mode.name} is the ${root} ${parent} you already own plus ${added.join(" and ")}. Play position ${position} (${shape}) exactly as you always do and add those two wherever they fall under your fingers. Nothing else changes.`,
+    },
+    {
+      title: `${character} is the whole mode`,
+      body: `The ${mode.character} is what makes this ${mode.name} rather than anything else. Land on it, hold it, bend into it — if a listener can't hear ${character}, they can't hear the mode, no matter how correct the other six notes were.`,
+    },
+    {
+      title: "Modes are harmony, not scales",
+      body: `These are the notes of ${relativeMajor(root, mode)} major. Played over the wrong chords that's exactly what they'll sound like. The mode only exists while the bass insists on ${root} — which is why you practise this over the vamp and never on its own.`,
+    },
+    {
+      title: "Resolve somewhere new",
+      body: `Your ear will pull every phrase home to ${root}. Try ending on ${character} instead and holding it through the chord change. Refusing to resolve is most of what makes modal playing sound modal.`,
+    },
+  ];
+
+  const neighbour = darkerThan(mode) ?? brighterThan(mode);
+  const diff = neighbour ? oneNoteApart(mode, neighbour) : null;
+  if (neighbour && diff) {
+    out.push({
+      title: `One note from ${neighbour.name}`,
+      body: `${mode.name} and ${neighbour.name} share six of seven notes — ${diff.brighter} against ${diff.darker} is the entire difference. Drill the pair as a single decision rather than two scales and you learn both in the time one would take.`,
+    });
+  }
+
+  if (mode.dropped) {
+    out.push({
+      title: "The one that breaks the rule",
+      body: `Every other mode adds two notes to a pentatonic. Locrian also removes one: the 5 flattens, and the root loses the interval that made it feel like a root. Play it once to hear what a missing perfect fifth costs you, then go back to something with a floor.`,
+    });
+  } else {
+    out.push({
+      title: "Say it out loud",
+      body: `${modeSpelling(root, mode).join(" ")}. Seven names you can say faster than you can play them. Naming notes while you play is slow at first and then it isn't, and afterwards you stop needing the fretboard diagram at all.`,
+    });
+  }
+
+  return out;
+}
+
 /** Tips relevant to a room, specialised to the current key, scale and chord. */
 export function tipsFor(room: TipRoom, ctx: TipContext): Tip[] {
   switch (room) {
@@ -180,5 +236,6 @@ export function tipsFor(room: TipRoom, ctx: TipContext): Tip[] {
     case "practice": return practiceTips(ctx);
     case "groove": return grooveTips();
     case "piano": return pianoTips(ctx);
+    case "modes": return modeTips(ctx);
   }
 }
