@@ -32,6 +32,23 @@ export function spellNote(text: string): string | null {
   return m[1].toUpperCase() + acc;
 }
 
+const LETTERS = ["C", "D", "E", "F", "G", "A", "B"];
+const LETTER_PC = [0, 2, 4, 5, 7, 9, 11];
+const ACCIDENTAL: Record<number, string> = { [-2]: "𝄫", [-1]: "♭", 0: "", 1: "♯", 2: "𝄪" };
+
+/**
+ * Spell the note `semis` above a spelled root, moving `steps` letters: the 3rd
+ * of B♭ is D, its ♭3 is D♭ — never C♯, which is the right sound but the wrong
+ * name for a third.
+ */
+export function spellInterval(root: string, semis: number, steps: number): string {
+  const li = LETTERS.indexOf(root[0]);
+  const rootPc = LETTER_PC[li] + (root.includes("♯") ? 1 : root.includes("♭") ? -1 : 0);
+  const ti = (li + steps) % 7;
+  const off = ((rootPc + semis - LETTER_PC[ti]) % 12 + 18) % 12 - 6;
+  return LETTERS[ti] + (ACCIDENTAL[off] ?? "");
+}
+
 // Standard tuning, string 6 (low E) → string 1 (high E), as semitones from C.
 // E=4, A=9, D=2, G=7, B=11, E=4
 export const TUNING = [4, 9, 2, 7, 11, 4]; // index 0 = string 6 (low E)
