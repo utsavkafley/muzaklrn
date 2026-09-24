@@ -8,6 +8,30 @@ export const PRETTY: Record<string, string> = {
 };
 export const prettyNote = (n: NoteName) => PRETTY[n] ?? n;
 
+/**
+ * Read a typed note name, forgivingly: any case, # or ♯ for sharp, b or ♭ for
+ * flat. Flats come back as their sharp spelling, since that is what NOTES
+ * holds. Anything else is null.
+ */
+export function parseNote(text: string): NoteName | null {
+  const m = text.trim().match(/^([a-g])([#♯b♭]?)$/i);
+  if (!m) return null;
+  const base = NOTES.indexOf(m[1].toUpperCase() as NoteName);
+  const shift = m[2] === "#" || m[2] === "♯" ? 1 : m[2] ? -1 : 0;
+  return NOTES[(base + shift + 12) % 12];
+}
+
+/**
+ * The name as it was typed, tidied: "bb" → "B♭", "f#" → "F♯". NOTES only
+ * spells sharps, so this is what keeps a typed flat a flat on screen.
+ */
+export function spellNote(text: string): string | null {
+  const m = text.trim().match(/^([a-g])([#♯b♭]?)$/i);
+  if (!m) return null;
+  const acc = m[2] === "#" || m[2] === "♯" ? "♯" : m[2] ? "♭" : "";
+  return m[1].toUpperCase() + acc;
+}
+
 // Standard tuning, string 6 (low E) → string 1 (high E), as semitones from C.
 // E=4, A=9, D=2, G=7, B=11, E=4
 export const TUNING = [4, 9, 2, 7, 11, 4]; // index 0 = string 6 (low E)

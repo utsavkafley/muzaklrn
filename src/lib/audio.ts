@@ -31,6 +31,43 @@ export function click(when: number, accent = false, gain = 1): Voice {
 }
 
 /**
+ * Two drumsticks knocked together, for count-offs. A woody knock is mostly a
+ * short, tight band of noise; a quick falling tone under it gives the wood.
+ */
+export function sticks(when: number, gain = 1): Voice {
+  const ac = audioCtx();
+  const len = 0.05;
+  const buf = ac.createBuffer(1, Math.ceil(ac.sampleRate * len), ac.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 4);
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  const bp = ac.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = 2600;
+  bp.Q.value = 4;
+
+  const osc = ac.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(1900, when);
+  osc.frequency.exponentialRampToValueAtTime(1200, when + 0.03);
+  const og = ac.createGain();
+  og.gain.setValueAtTime(0.0001, when);
+  og.gain.exponentialRampToValueAtTime(0.35, when + 0.001);
+  og.gain.exponentialRampToValueAtTime(0.0001, when + 0.035);
+
+  const g = ac.createGain();
+  g.gain.value = 1.4 * gain;
+  src.connect(bp).connect(g);
+  osc.connect(og).connect(g);
+  g.connect(ac.destination);
+  src.start(when);
+  osc.start(when);
+  osc.stop(when + 0.05);
+  return silencer(g, () => { src.stop(); osc.stop(); });
+}
+
+/**
  * A stop handle for a scheduled one-shot. Anything already committed to the
  * audio graph keeps its appointment unless something cancels it, and the
  * metronome now schedules seconds ahead — so a stop has to reach into the

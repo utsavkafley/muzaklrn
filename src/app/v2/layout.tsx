@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Quicksand, Caveat } from "next/font/google";
-import Nav from "@/components/Nav";
-import "./globals.css";
+import "../globals.css";
 
 const quicksand = Quicksand({ subsets: ["latin"], variable: "--font-quicksand" });
 const caveat = Caveat({ subsets: ["latin"], variable: "--font-caveat" });
@@ -17,12 +16,12 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/** v2's own root layout: a fresh slate, no v1 nav or page chrome. */
+export default function V2Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${quicksand.variable} ${caveat.variable}`}>
       <body className="bg-neutral-50 font-[family-name:var(--font-quicksand)] text-neutral-900 antialiased">
-        <Nav />
-        <main className="mx-auto max-w-4xl px-4 pt-6 pb-24 md:pt-20 md:pb-10">{children}</main>
+        {children}
       </body>
     </html>
   );
