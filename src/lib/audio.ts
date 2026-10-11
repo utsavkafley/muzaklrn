@@ -7,11 +7,14 @@
 
 let ctx: AudioContext | null = null;
 let master: AudioNode | null = null;
+/** The end of the master bus, which is what gets routed to an output. */
+let tail: AudioNode | null = null;
 
 export function audioCtx(): AudioContext {
   if (!ctx) {
     ctx = new AudioContext({ latencyHint: "interactive" });
-    master = buildMaster(ctx);
+    [master, tail] = buildMaster(ctx);
+    tail.connect(ctx.destination);
     const saved = savedOutput();
     if (saved) applyOutput(saved).catch(() => {});
   }
@@ -25,7 +28,7 @@ function out(): AudioNode {
   return master!;
 }
 
-function buildMaster(ac: AudioContext): AudioNode {
+function buildMaster(ac: AudioContext): [AudioNode, AudioNode] {
   const trim = ac.createGain();
   trim.gain.value = 0.8;
   // A fast, hard compressor sitting just under full scale: a limiter. Quiet
@@ -36,20 +39,24 @@ function buildMaster(ac: AudioContext): AudioNode {
   lim.ratio.value = 16;
   lim.attack.value = 0.002;
   lim.release.value = 0.12;
-  trim.connect(lim).connect(ac.destination);
-  return trim;
+  trim.connect(lim);
+  return [trim, lim];
 }
 
 // ---------- Output device ----------
-// Chrome and Edge let a page choose its own output (AudioContext.setSinkId),
-// so the app can play through an amp's USB audio while the rest of the
-// computer stays on its speakers. Elsewhere the system output is used.
+// The app can play through a chosen device — an amp's USB audio, say — while
+// the rest of the computer stays on its speakers. The master bus is handed to
+// a hidden <audio> element and that element's output is switched
+// (HTMLMediaElement.setSinkId): the long-standing, dependable route in
+// Chrome and Edge. Switching the AudioContext itself (AudioContext.setSinkId)
+// is newer, and played nothing through a BOSS Katana over USB.
 
-type SinkContext = AudioContext & { setSinkId: (id: string) => Promise<void> };
+type SinkElement = HTMLAudioElement & { setSinkId: (id: string) => Promise<void> };
 const OUTPUT_KEY = "muzaklrn.output";
+let routed: { node: MediaStreamAudioDestinationNode; el: SinkElement } | null = null;
 
 export const canPickOutput = () =>
-  typeof AudioContext !== "undefined" && "setSinkId" in AudioContext.prototype;
+  typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype;
 
 function savedOutput(): string {
   try {
@@ -59,8 +66,31 @@ function savedOutput(): string {
   }
 }
 
+/**
+ * Point the master bus at device `id`, or back at the default speakers for
+ * "". If the device can't be reached, sound stays where it was and the
+ * error says why.
+ */
 async function applyOutput(id: string) {
-  if (ctx && canPickOutput()) await (ctx as SinkContext).setSinkId(id);
+  if (!ctx || !tail || !canPickOutput()) return;
+  if (!id) {
+    if (routed) {
+      tail.disconnect();
+      tail.connect(ctx.destination);
+      routed.el.pause();
+      routed = null;
+    }
+    return;
+  }
+  const node = routed?.node ?? ctx.createMediaStreamDestination();
+  const el = routed?.el ?? (new Audio() as SinkElement);
+  el.srcObject = node.stream;
+  await el.setSinkId(id);
+  await el.play();
+  // Only once the device has taken the stream does sound leave the speakers.
+  tail.disconnect();
+  tail.connect(node);
+  routed = { node, el };
 }
 
 /** Send every sound to device `id` ("" for the system default), and remember it. */
@@ -70,7 +100,16 @@ export async function setOutput(id: string) {
   } catch {
     /* private mode: still switch, just don't remember */
   }
+  audioCtx();
   await applyOutput(id);
+}
+
+/** A short two-note chime through the current output, to check it's working. */
+export function testTone() {
+  const ac = audioCtx();
+  const t = ac.currentTime + 0.05;
+  pluck(64, t, 0.6, 0.45);
+  pluck(71, t + 0.25, 0.8, 0.45);
 }
 
 export const currentOutput = savedOutput;

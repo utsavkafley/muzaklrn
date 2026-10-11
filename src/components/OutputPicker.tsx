@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
-  OutputDevice, canPickOutput, currentOutput, listOutputs, setOutput, unlockOutputNames,
+  OutputDevice, canPickOutput, currentOutput, listOutputs, setOutput, testTone, unlockOutputNames,
 } from "@/lib/audio";
 
 const noSubscribe = () => () => {};
@@ -55,8 +55,11 @@ export default function OutputPicker() {
     setNote(null);
     try {
       await setOutput(id);
-    } catch {
-      setNote("Couldn't switch to that output — is it still connected?");
+      testTone();
+    } catch (e) {
+      // Say what actually went wrong: it's the only way to tell a missing
+      // permission from an unplugged amp from a browser that won't play.
+      setNote(`Couldn't switch to that output (${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}).`);
     }
   };
 
@@ -82,6 +85,9 @@ export default function OutputPicker() {
             <option key={d.id} value={d.id}>{d.label || `Output ${i + 1}`}</option>
           ))}
         </select>
+        <button onClick={testTone} className="rounded-full border border-neutral-300 px-2.5 py-0.5 text-neutral-600 hover:border-neutral-500">
+          test
+        </button>
         {hidden && (
           <button onClick={showNames} className="text-neutral-500 underline underline-offset-2 hover:text-neutral-800">
             find devices
