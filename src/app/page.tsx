@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import BeatLine from "@/components/BeatLine";
 import Fretboard, { FbNote, FretGeo } from "@/components/Fretboard";
 import GripDiagram from "@/components/GripDiagram";
+import OutputPicker from "@/components/OutputPicker";
 import ProgressionStrip from "@/components/ProgressionStrip";
 import RiffLayer from "@/components/RiffLayer";
 import { Metronome, Voice, audioCtx, click, pluck, sticks } from "@/lib/audio";
@@ -36,7 +37,7 @@ const MODE_MOODS = Object.fromEntries(
 const INK = "#18181b";
 
 /** Strum a chord low to high, returning every voice so a stop can cut it. */
-function strum(midis: number[], when: number, vol = 0.3): Voice[] {
+function strum(midis: number[], when: number, vol = 0.24): Voice[] {
   return midis.map((m, i) => pluck(m, when + i * 0.014, 1.6, vol * (1 - i * 0.06)));
 }
 
@@ -56,6 +57,12 @@ export default function Page() {
   /** Which kind of chord the chord row offers: triads, sevenths, sus. */
   const [kind, setKind] = useState<ChordKind>("triad");
   const chords = useMemo(() => (name ? diatonicChords(name, shown, kind) : null), [name, shown, kind]);
+  // Fingerings search the neck; worked out once per chord set, not on every
+  // beat's re-render, so the metronome's scheduler never waits on them.
+  const grips = useMemo(
+    () => (note && chords ? chords.map((c) => (c ? { full: fullGrip(note, c), three: minimalGrip(note, c) } : null)) : []),
+    [note, chords],
+  );
   const chordOf = (ref: ChordRef) => buildOrTriad(name!, scale!, ref);
 
   // ---- study: riffs, licks, arpeggios, triads, the circle ----
@@ -208,7 +215,7 @@ export default function Page() {
         half = b.halves.length === 2 && t.sub >= 2 ? 1 : 0;
         if (t.sub === 0 || (t.sub === 2 && b.halves.length === 2)) {
           // Chords sit back when a phrase is out front.
-          voices.current.push(...strum(b.halves[half], t.when, ph ? 0.16 : 0.3));
+          voices.current.push(...strum(b.halves[half], t.when, ph ? 0.12 : 0.24));
         }
       }
       if (t.sub === 0) {
@@ -431,8 +438,7 @@ export default function Page() {
                         </div>
                       );
                     }
-                    const full = fullGrip(note, c);
-                    const three = minimalGrip(note, c);
+                    const { full, three } = grips[i] ?? { full: null, three: null };
                     const ref: ChordRef = { degree: c.degree, kind: c.kind };
                     return (
                       <div key={i} className="group relative">
@@ -553,6 +559,11 @@ export default function Page() {
           </>
         )}
       </div>
+
+      {/* Where the sound comes out: an amp over USB, or the speakers. */}
+      <footer className="w-full border-t border-neutral-200 pt-5">
+        <OutputPicker />
+      </footer>
 
       {/* The chord being dragged follows the pointer. */}
       {drag && name && scale && (

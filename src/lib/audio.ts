@@ -1,12 +1,124 @@
 // Web Audio engine: lookahead metronome scheduler, pluck synth, strum noise.
 // One shared AudioContext, created lazily on first user gesture.
+//
+// Every sound goes through one master bus — a little headroom, then a
+// limiter — rather than straight to the speakers. Click, strums and a riff
+// stacked on one beat used to add up past full scale and crackle.
 
 let ctx: AudioContext | null = null;
+let master: AudioNode | null = null;
+
 export function audioCtx(): AudioContext {
-  if (!ctx) ctx = new AudioContext();
+  if (!ctx) {
+    ctx = new AudioContext({ latencyHint: "interactive" });
+    master = buildMaster(ctx);
+    const saved = savedOutput();
+    if (saved) applyOutput(saved).catch(() => {});
+  }
   if (ctx.state === "suspended") ctx.resume();
   return ctx;
 }
+
+/** Where every sound connects: the master bus, not the speakers directly. */
+function out(): AudioNode {
+  audioCtx();
+  return master!;
+}
+
+function buildMaster(ac: AudioContext): AudioNode {
+  const trim = ac.createGain();
+  trim.gain.value = 0.8;
+  // A fast, hard compressor sitting just under full scale: a limiter. Quiet
+  // passages pass untouched; only the stacked peaks get held down.
+  const lim = ac.createDynamicsCompressor();
+  lim.threshold.value = -9;
+  lim.knee.value = 6;
+  lim.ratio.value = 16;
+  lim.attack.value = 0.002;
+  lim.release.value = 0.12;
+  trim.connect(lim).connect(ac.destination);
+  return trim;
+}
+
+// ---------- Output device ----------
+// Chrome and Edge let a page choose its own output (AudioContext.setSinkId),
+// so the app can play through an amp's USB audio while the rest of the
+// computer stays on its speakers. Elsewhere the system output is used.
+
+type SinkContext = AudioContext & { setSinkId: (id: string) => Promise<void> };
+const OUTPUT_KEY = "muzaklrn.output";
+
+export const canPickOutput = () =>
+  typeof AudioContext !== "undefined" && "setSinkId" in AudioContext.prototype;
+
+function savedOutput(): string {
+  try {
+    return localStorage.getItem(OUTPUT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+async function applyOutput(id: string) {
+  if (ctx && canPickOutput()) await (ctx as SinkContext).setSinkId(id);
+}
+
+/** Send every sound to device `id` ("" for the system default), and remember it. */
+export async function setOutput(id: string) {
+  try {
+    localStorage.setItem(OUTPUT_KEY, id);
+  } catch {
+    /* private mode: still switch, just don't remember */
+  }
+  await applyOutput(id);
+}
+
+export const currentOutput = savedOutput;
+
+export interface OutputDevice {
+  id: string;
+  label: string;
+}
+
+/** The audio outputs the browser can see. Labels are blank until the page has been granted the microphone. */
+export async function listOutputs(): Promise<OutputDevice[]> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) return [];
+  const all = await navigator.mediaDevices.enumerateDevices();
+  return all
+    .filter((d) => d.kind === "audiooutput" && d.deviceId !== "default" && d.deviceId !== "communications")
+    .map((d) => ({ id: d.deviceId, label: d.label }));
+}
+
+/**
+ * Chrome only names devices for pages that have had microphone access. Ask
+ * once, let go of the microphone straight away — nothing is recorded — and
+ * the names are there from then on.
+ */
+export async function unlockOutputNames() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  stream.getTracks().forEach((t) => t.stop());
+}
+
+/**
+ * Bring a gain to silence from `at` without a jump. The envelope is held at
+ * whatever it will actually be at that moment, then eased down — cutting it
+ * from its present value instead clicked whenever the cut lay in the future,
+ * as when the next riff note on a string silences the last.
+ */
+function fadeOut(g: GainNode, at: number, start: number, time = 0.03) {
+  const p = g.gain;
+  if (at <= start) {
+    // Never started: nothing is sounding, so just keep it silent.
+    p.cancelScheduledValues(0);
+    p.setValueAtTime(0, 0);
+    return;
+  }
+  // Firefox has no cancelAndHoldAtTime; there the cut is close, not exact.
+  if (typeof p.cancelAndHoldAtTime === "function") p.cancelAndHoldAtTime(at);
+  else p.cancelScheduledValues(at);
+  p.setTargetAtTime(0, at, time / 3);
+}
+
 
 export const midiToFreq = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -22,12 +134,12 @@ export function click(when: number, accent = false, gain = 1): Voice {
   const g = ac.createGain();
   osc.frequency.value = accent ? 1568 : 1046;
   g.gain.setValueAtTime(0.0001, when);
-  g.gain.exponentialRampToValueAtTime((accent ? 0.5 : 0.28) * gain, when + 0.002);
+  g.gain.exponentialRampToValueAtTime((accent ? 0.38 : 0.22) * gain, when + 0.002);
   g.gain.exponentialRampToValueAtTime(0.0001, when + (accent ? 0.09 : 0.05));
-  osc.connect(g).connect(ac.destination);
+  osc.connect(g).connect(out());
   osc.start(when);
   osc.stop(when + 0.1);
-  return silencer(g, () => osc.stop());
+  return silencer(g, () => osc.stop(), when);
 }
 
 /**
@@ -57,14 +169,14 @@ export function sticks(when: number, gain = 1): Voice {
   og.gain.exponentialRampToValueAtTime(0.0001, when + 0.035);
 
   const g = ac.createGain();
-  g.gain.value = 1.4 * gain;
+  g.gain.value = 1.1 * gain;
   src.connect(bp).connect(g);
   osc.connect(og).connect(g);
-  g.connect(ac.destination);
+  g.connect(out());
   src.start(when);
   osc.start(when);
   osc.stop(when + 0.05);
-  return silencer(g, () => { src.stop(); osc.stop(); });
+  return silencer(g, () => { src.stop(); osc.stop(); }, when);
 }
 
 /**
@@ -73,15 +185,14 @@ export function sticks(when: number, gain = 1): Voice {
  * metronome now schedules seconds ahead — so a stop has to reach into the
  * future and cut what has not sounded yet.
  */
-function silencer(g: GainNode, kill: () => void): Voice {
+function silencer(g: GainNode, kill: () => void, start = 0): Voice {
   return {
     stop(when?: number) {
       const ac = audioCtx();
       const at = Math.max(when ?? ac.currentTime, ac.currentTime);
       try {
-        g.gain.cancelScheduledValues(at);
-        g.gain.setValueAtTime(0.0001, at);
-        kill();
+        fadeOut(g, at, start, 0.01);
+        if (at <= start) kill();
       } catch {
         /* already finished */
       }
@@ -112,7 +223,7 @@ export function pluck(midi: number, when?: number, dur = 0.9, vol = 0.5): Voice 
   g2.gain.value = 0.25;
   osc.connect(lp);
   osc2.connect(g2).connect(lp);
-  lp.connect(g).connect(ac.destination);
+  lp.connect(g).connect(out());
   osc.start(t); osc2.start(t);
   osc.stop(t + dur + 0.05); osc2.stop(t + dur + 0.05);
 
@@ -120,11 +231,8 @@ export function pluck(midi: number, when?: number, dur = 0.9, vol = 0.5): Voice 
     stop(when?: number) {
       const at = Math.max(when ?? ac.currentTime, ac.currentTime);
       try {
-        // A voice scheduled for later has no envelope yet; silence it outright.
-        g.gain.cancelScheduledValues(at);
-        g.gain.setValueAtTime(at < t ? 0.0001 : Math.max(g.gain.value, 0.0001), at);
-        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.04);
-        osc.stop(at + 0.05); osc2.stop(at + 0.05);
+        fadeOut(g, at, t, 0.04);
+        osc.stop(at + 0.06); osc2.stop(at + 0.06);
       } catch {
         /* already stopped */
       }
@@ -200,7 +308,7 @@ export function riffNote(o: {
   lp.frequency.setValueAtTime(Math.min(f * (o.picked ? 7 : 4), 8000), t);
   lp.frequency.exponentialRampToValueAtTime(Math.max(f * 1.6, 400), t + dur + 0.2);
   const g = ac.createGain();
-  const peak = o.picked ? 0.45 : 0.3;
+  const peak = o.picked ? 0.36 : 0.26;
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(peak, t + (o.picked ? 0.005 : 0.015));
   g.gain.exponentialRampToValueAtTime(peak * 0.5, t + dur);
@@ -209,7 +317,7 @@ export function riffNote(o: {
   g2.gain.value = 0.25;
   osc.connect(lp);
   osc2.connect(g2).connect(lp);
-  lp.connect(g).connect(ac.destination);
+  lp.connect(g).connect(out());
   osc.start(t); osc2.start(t);
   osc.stop(t + dur + 0.3); osc2.stop(t + dur + 0.3);
 
@@ -217,10 +325,8 @@ export function riffNote(o: {
     stop(when?: number) {
       const at = Math.max(when ?? ac.currentTime, ac.currentTime);
       try {
-        g.gain.cancelScheduledValues(at);
-        g.gain.setValueAtTime(at < t ? 0.0001 : Math.max(g.gain.value, 0.0001), at);
-        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.03);
-        osc.stop(at + 0.04); osc2.stop(at + 0.04);
+        fadeOut(g, at, t, 0.03);
+        osc.stop(at + 0.05); osc2.stop(at + 0.05);
       } catch {
         /* already stopped */
       }
@@ -258,9 +364,9 @@ export function strumNoise(when: number, up: boolean, accent = false): Voice {
   bp.Q.value = 0.8;
   const g = ac.createGain();
   g.gain.value = (up ? 0.25 : 0.45) * (accent ? 1.7 : 1);
-  src.connect(bp).connect(g).connect(ac.destination);
+  src.connect(bp).connect(g).connect(out());
   src.start(when);
-  return silencer(g, () => src.stop());
+  return silencer(g, () => src.stop(), when);
 }
 
 // ---------- Scheduler ----------
@@ -278,7 +384,7 @@ export interface Tick {
 
 /**
  * Lookahead scheduler (the classic "A Tale of Two Clocks" pattern).
- * Calls schedule(tick) ~0.12s ahead of time; caller makes sounds at tick.when
+ * Calls schedule(tick) ~0.2s ahead of time; caller makes sounds at tick.when
  * and can setTimeout UI updates for (tick.when - ctx.currentTime).
  */
 export class Metronome {
@@ -302,7 +408,7 @@ export class Metronome {
    * change should be audible immediately rather than after a buffer drains.
    */
   private get horizon() {
-    return typeof document !== "undefined" && document.hidden ? 1.5 : 0.12;
+    return typeof document !== "undefined" && document.hidden ? 1.5 : 0.2;
   }
 
   start() {
