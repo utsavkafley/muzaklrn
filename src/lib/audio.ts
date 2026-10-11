@@ -132,6 +132,102 @@ export function pluck(midi: number, when?: number, dur = 0.9, vol = 0.5): Voice 
   };
 }
 
+/** A pitch change partway through a riff note. */
+export interface Glide {
+  /** AudioContext time the change starts. */
+  at: number;
+  /** Seconds it takes. */
+  dur: number;
+  /** Where the pitch ends up. */
+  midi: number;
+  /** A slide moves fret by fret; a bend moves smoothly. */
+  stepped?: boolean;
+}
+
+/**
+ * One note of a riff, played the way the hand plays it. A picked note gets
+ * a sharp attack; a hammer-on or pull-off sounds from the fretting hand
+ * alone, softer and rounder. Glides carry slides and bends, and vibrato
+ * wavers the pitch once the note has settled.
+ */
+export function riffNote(o: {
+  midi: number; when: number; dur: number; picked: boolean; glides?: Glide[]; vibrato?: boolean;
+}): Voice {
+  const ac = audioCtx();
+  const { when: t, dur } = o;
+  const f = midiToFreq(o.midi);
+  const osc = ac.createOscillator();
+  osc.type = "triangle";
+  const osc2 = ac.createOscillator();
+  osc2.type = "sine";
+  osc.frequency.setValueAtTime(f, t);
+  osc2.frequency.setValueAtTime(f * 2, t);
+
+  // Pitch moves: both oscillators together, the harmonic an octave up.
+  let cur = o.midi;
+  for (const g of o.glides ?? []) {
+    if (g.stepped) {
+      const n = Math.abs(g.midi - cur);
+      const dir = Math.sign(g.midi - cur);
+      for (let k = 1; k <= n; k++) {
+        const at = g.at + (g.dur * k) / n;
+        osc.frequency.setValueAtTime(midiToFreq(cur + dir * k), at);
+        osc2.frequency.setValueAtTime(midiToFreq(cur + dir * k) * 2, at);
+      }
+    } else {
+      osc.frequency.setValueAtTime(midiToFreq(cur), g.at);
+      osc2.frequency.setValueAtTime(midiToFreq(cur) * 2, g.at);
+      osc.frequency.linearRampToValueAtTime(midiToFreq(g.midi), g.at + g.dur);
+      osc2.frequency.linearRampToValueAtTime(midiToFreq(g.midi) * 2, g.at + g.dur);
+    }
+    cur = g.midi;
+  }
+
+  if (o.vibrato) {
+    const lfo = ac.createOscillator();
+    lfo.frequency.value = 5.5;
+    const depth = ac.createGain();
+    depth.gain.setValueAtTime(0, t);
+    depth.gain.linearRampToValueAtTime(midiToFreq(cur) * 0.018, t + dur * 0.4);
+    lfo.connect(depth);
+    depth.connect(osc.frequency);
+    lfo.start(t);
+    lfo.stop(t + dur + 0.3);
+  }
+
+  const lp = ac.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.setValueAtTime(Math.min(f * (o.picked ? 7 : 4), 8000), t);
+  lp.frequency.exponentialRampToValueAtTime(Math.max(f * 1.6, 400), t + dur + 0.2);
+  const g = ac.createGain();
+  const peak = o.picked ? 0.45 : 0.3;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + (o.picked ? 0.005 : 0.015));
+  g.gain.exponentialRampToValueAtTime(peak * 0.5, t + dur);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.25);
+  const g2 = ac.createGain();
+  g2.gain.value = 0.25;
+  osc.connect(lp);
+  osc2.connect(g2).connect(lp);
+  lp.connect(g).connect(ac.destination);
+  osc.start(t); osc2.start(t);
+  osc.stop(t + dur + 0.3); osc2.stop(t + dur + 0.3);
+
+  return {
+    stop(when?: number) {
+      const at = Math.max(when ?? ac.currentTime, ac.currentTime);
+      try {
+        g.gain.cancelScheduledValues(at);
+        g.gain.setValueAtTime(at < t ? 0.0001 : Math.max(g.gain.value, 0.0001), at);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.03);
+        osc.stop(at + 0.04); osc2.stop(at + 0.04);
+      } catch {
+        /* already stopped */
+      }
+    },
+  };
+}
+
 /** Piano-style block chord: all notes struck together, not staggered. */
 export function blockChord(midis: number[], when?: number, vol = 0.35) {
   const ac = audioCtx();

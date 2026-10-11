@@ -52,12 +52,6 @@ h1, h2, h3 {
   text-wrap: balance;
 }
 
-/* The handwritten display face carries the page — let it breathe. */
-.font-\[family-name\:var\(--font-caveat\)\] {
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
 /* Small uppercase labels need tracking to stay legible at weight 500. */
 .uppercase {
   letter-spacing: 0.09em;
@@ -74,51 +68,6 @@ button {
   -webkit-user-select: none;
   touch-action: manipulation;
   font-weight: 600;
-}
-
-/* The BPM slider is drawn by hand rather than left to the UA: Chromium still
-   paints a range track from the OS preference even under color-scheme: light,
-   so on a dark-set machine the default track came back near-black on a white
-   page. --fill is the played proportion, set inline by the component. */
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 22px;
-  background: transparent;
-  cursor: pointer;
-}
-input[type="range"]::-webkit-slider-runnable-track {
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(to right, #fbbf24 var(--fill, 0%), #e7e5e4 var(--fill, 0%));
-}
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 18px;
-  width: 18px;
-  margin-top: -6px;
-  border-radius: 999px;
-  background: #fbbf24;
-  border: 2px solid #fafaf9;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
-}
-input[type="range"]::-moz-range-track {
-  height: 6px;
-  border-radius: 999px;
-  background: #e7e5e4;
-}
-input[type="range"]::-moz-range-progress {
-  height: 6px;
-  border-radius: 999px;
-  background: #fbbf24;
-}
-input[type="range"]::-moz-range-thumb {
-  height: 18px;
-  width: 18px;
-  border-radius: 999px;
-  background: #fbbf24;
-  border: 2px solid #fafaf9;
 }
 
 /* Keyboard focus should be visible now that everything is bigger. */

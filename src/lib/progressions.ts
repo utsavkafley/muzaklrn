@@ -1,191 +1,74 @@
-import { Chord, ChordQuality, NoteName, ScaleKind, noteAt, noteIndex } from "./theory";
+// Progressions to start from, a handful per mode. Written as scale degrees
+// (0 = I … 6 = vii) and chord kinds, never as chord names, so every one of
+// them plays in any key. A bar holds one chord, or two splitting it in half.
 
-export interface RomanChord {
-  numeral: string;
-  semitones: number; // from key root
-  quality: ChordQuality;
-  beats?: number; // default 4
+import { ChordKind, ChordRef } from "./harmony";
+import { MODES, ModeId } from "./modes";
+
+export type Bar = ChordRef[];
+
+/** "0 3 4 0" → four one-chord bars; "1+4" splits a bar; "7" after a degree makes it a seventh. */
+function bars(spec: string): Bar[] {
+  const one = (t: string): ChordRef => {
+    const kind: ChordKind = t.endsWith("7") && t.length > 1 ? "seventh" : t.endsWith("s4") ? "sus4" : t.endsWith("s2") ? "sus2" : "triad";
+    return { degree: Number(t[0]), kind };
+  };
+  return spec.split(" ").map((b) => b.split("+").map(one));
 }
 
-export interface Progression {
-  id: string;
-  name: string;
-  minor?: boolean; // key is treated as minor
-  /** Which pentatonic sits naturally over this, with the key as tonic. */
-  fits: ScaleKind[];
-  chords: RomanChord[];
-}
+/**
+ * Hand-picked, beyond each mode's vamp (which comes first, from modes.ts):
+ * the progressions people actually reach for in that mode, plus one with a
+ * split bar so the strip shows what a split sounds like.
+ */
+const EXTRA: Record<ModeId, string[]> = {
+  ionian: [
+    "0 3 4 0",          // I IV V I — the round trip
+    "0 4 5 3",          // I V vi IV — most of pop radio
+    "0 5 3 4",          // I vi IV V — the fifties
+    "17 47 07 07",      // ii7 V7 Imaj7 — jazz's home run
+    "0 3 1+4 0",        // I IV ii-V I
+  ],
+  lydian: [
+    "0 1 2 1",          // I II iii II
+    "0 1 5 1",          // I II vi II
+    "07 1 07 1+4",      // Imaj7 II Imaj7 II-V
+  ],
+  mixolydian: [
+    "0 6 3 0",          // I ♭VII IV I — the classic rock turnaround
+    "0 3 6 3",          // I IV ♭VII IV
+    "0 4 3 0",          // I v IV I
+    "0 0 6+3 0",        // I I ♭VII-IV I
+  ],
+  dorian: [
+    "0 2 3 0",          // i ♭III IV i
+    "0 6 3 0",          // i ♭VII IV i
+    "07 37 07 37",      // i7 IV7 — Santana's groove
+    "0 0 3+6 0",        // i i IV-♭VII i
+  ],
+  aeolian: [
+    "0 5 2 6",          // i ♭VI ♭III ♭VII — minor-key pop
+    "0 3 4 0",          // i iv v i
+    "0 6 5 6",          // i ♭VII ♭VI ♭VII
+    "0 3 5+6 0",        // i iv ♭VI-♭VII i — the "epic" climb home
+  ],
+  phrygian: [
+    "0 1 2 1",          // i ♭II ♭III ♭II
+    "0 6 5 1",          // i ♭vii ♭VI ♭II
+    "0 3 1 0",          // i iv ♭II i
+  ],
+  locrian: [
+    "0 1 2 1",          // i° ♭II ♭iii ♭II
+    "0 3 1 0",          // i° iv ♭II i°
+  ],
+};
 
-export const PROGRESSIONS: Progression[] = [
-  {
-    id: "axis",
-    fits: ["majorPent"],
-    name: "I – V – vi – IV",
-    chords: [
-      { numeral: "I", semitones: 0, quality: "maj" },
-      { numeral: "V", semitones: 7, quality: "maj" },
-      { numeral: "vi", semitones: 9, quality: "min" },
-      { numeral: "IV", semitones: 5, quality: "maj" },
-    ],
-  },
-  {
-    id: "axis-min",
-    fits: ["majorPent", "minorPent"],
-    name: "vi – IV – I – V",
-    chords: [
-      { numeral: "vi", semitones: 9, quality: "min" },
-      { numeral: "IV", semitones: 5, quality: "maj" },
-      { numeral: "I", semitones: 0, quality: "maj" },
-      { numeral: "V", semitones: 7, quality: "maj" },
-    ],
-  },
-  {
-    id: "50s",
-    fits: ["majorPent"],
-    name: "I – vi – IV – V",
-    chords: [
-      { numeral: "I", semitones: 0, quality: "maj" },
-      { numeral: "vi", semitones: 9, quality: "min" },
-      { numeral: "IV", semitones: 5, quality: "maj" },
-      { numeral: "V", semitones: 7, quality: "maj" },
-    ],
-  },
-  {
-    id: "blues",
-    fits: ["minorPent", "majorPent"],
-    name: "I7 – IV7 – V7",
-    chords: [
-      { numeral: "I7", semitones: 0, quality: "7", beats: 16 },
-      { numeral: "IV7", semitones: 5, quality: "7", beats: 8 },
-      { numeral: "I7", semitones: 0, quality: "7", beats: 8 },
-      { numeral: "V7", semitones: 7, quality: "7", beats: 4 },
-      { numeral: "IV7", semitones: 5, quality: "7", beats: 4 },
-      { numeral: "I7", semitones: 0, quality: "7", beats: 4 },
-      { numeral: "V7", semitones: 7, quality: "7", beats: 4 },
-    ],
-  },
-  {
-    id: "andalusian",
-    fits: ["minorPent"],
-    name: "i – ♭VII – ♭VI – V",
-    minor: true,
-    chords: [
-      { numeral: "i", semitones: 0, quality: "min" },
-      { numeral: "♭VII", semitones: 10, quality: "maj" },
-      { numeral: "♭VI", semitones: 8, quality: "maj" },
-      { numeral: "V", semitones: 7, quality: "maj" },
-    ],
-  },
-  {
-    id: "251",
-    fits: ["majorPent"],
-    name: "ii – V – I",
-    chords: [
-      { numeral: "iim7", semitones: 2, quality: "min7" },
-      { numeral: "V7", semitones: 7, quality: "7" },
-      { numeral: "Imaj7", semitones: 0, quality: "maj7", beats: 8 },
-    ],
-  },
-  {
-    id: "minor-lift",
-    fits: ["minorPent"],
-    name: "i – ♭VI – ♭III – ♭VII",
-    minor: true,
-    chords: [
-      { numeral: "i", semitones: 0, quality: "min" },
-      { numeral: "♭VI", semitones: 8, quality: "maj" },
-      { numeral: "♭III", semitones: 3, quality: "maj" },
-      { numeral: "♭VII", semitones: 10, quality: "maj" },
-    ],
-  },
-  {
-    id: "i-iv-v-min",
-    name: "i – iv – v",
-    minor: true,
-    fits: ["minorPent"],
-    chords: [
-      { numeral: "i", semitones: 0, quality: "min", beats: 8 },
-      { numeral: "iv", semitones: 5, quality: "min" },
-      { numeral: "v", semitones: 7, quality: "min" },
-    ],
-  },
-  {
-    id: "dorian-vamp",
-    name: "i – IV",
-    minor: true,
-    fits: ["minorPent"],
-    chords: [
-      { numeral: "i", semitones: 0, quality: "min7", beats: 8 },
-      { numeral: "IV", semitones: 5, quality: "maj", beats: 8 },
-    ],
-  },
-  {
-    id: "i-bvii",
-    name: "i – \u266dVII",
-    minor: true,
-    fits: ["minorPent"],
-    chords: [
-      { numeral: "i", semitones: 0, quality: "min", beats: 8 },
-      { numeral: "\u266dVII", semitones: 10, quality: "maj", beats: 8 },
-    ],
-  },
-  {
-    id: "i-iv-v",
-    name: "I – IV – V",
-    fits: ["majorPent"],
-    chords: [
-      { numeral: "I", semitones: 0, quality: "maj", beats: 8 },
-      { numeral: "IV", semitones: 5, quality: "maj" },
-      { numeral: "V", semitones: 7, quality: "maj" },
-    ],
-  },
-  {
-    id: "i-iii-iv-v",
-    name: "I – iii – IV – V",
-    fits: ["majorPent"],
-    chords: [
-      { numeral: "I", semitones: 0, quality: "maj" },
-      { numeral: "iii", semitones: 4, quality: "min" },
-      { numeral: "IV", semitones: 5, quality: "maj" },
-      { numeral: "V", semitones: 7, quality: "maj" },
-    ],
-  },
-  {
-    id: "i-v-min",
-    name: "I – V",
-    fits: ["majorPent"],
-    chords: [
-      { numeral: "I", semitones: 0, quality: "maj", beats: 8 },
-      { numeral: "V", semitones: 7, quality: "maj", beats: 8 },
-    ],
-  },
-];
-
-export interface ProgChord {
-  chord: Chord;
-  numeral: string;
-  beats: number;
-}
-
-export function realize(p: Progression, key: NoteName): ProgChord[] {
-  return p.chords.map((rc) => ({
-    chord: { root: noteAt(noteIndex(key) + rc.semitones), quality: rc.quality },
-    numeral: rc.numeral,
-    beats: rc.beats ?? 4,
-  }));
-}
-
-/** Progressions whose tonic behaviour matches the scale being practised. */
-export function progressionsFor(kind: ScaleKind): Progression[] {
-  return PROGRESSIONS.filter((p) => p.fits.includes(kind));
-}
-
-/** n distinct items, chosen at random. Call from an effect — not during render. */
-export function sample<T>(arr: T[], n: number): T[] {
-  const pool = [...arr];
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  return pool.slice(0, Math.min(n, pool.length));
+/** Every preset for a mode, its vamp first. */
+export function presetsFor(id: ModeId): Bar[][] {
+  const mode = MODES.find((m) => m.id === id)!;
+  const vamp: Bar[] = mode.vamp.map((v) => [{
+    degree: mode.intervals.indexOf(v.semitones),
+    kind: v.quality === "maj" || v.quality === "min" ? "triad" : "seventh",
+  }]);
+  return [vamp, ...EXTRA[id].map(bars)];
 }

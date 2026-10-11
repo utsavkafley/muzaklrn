@@ -10,6 +10,8 @@ export interface FbNote {
   fill: string; // css color
   ring?: string; // optional outline color (pivot/chord-tone emphasis)
   dim?: boolean;
+  /** Diamond marks a note as part of something played over the scale, e.g. a chord. */
+  shape?: "circle" | "diamond";
 }
 
 interface Props {
@@ -26,6 +28,27 @@ interface Props {
    * A portrait phone has the room for a neck this way round. Always fits.
    */
   vertical?: boolean;
+  /** Drawn over the notes, with the neck's geometry, for anything that moves. */
+  overlay?: (geo: FretGeo) => React.ReactNode;
+}
+
+/**
+ * The neck's layout, for drawing on top of it. `u` runs along the neck and
+ * `v` across the strings; `at` turns those into x/y for either orientation.
+ * `across` takes fractional strings, so a bend can push a dot between them.
+ */
+export interface FretGeo {
+  vertical: boolean;
+  R: number;
+  fretL: number;
+  stringGap: number;
+  maxFret: number;
+  at: (u: number, v: number) => { x: number; y: number };
+  across: (s: number) => number;
+  fretLine: (f: number) => number;
+  fretMid: (f: number) => number;
+  /** x/y of the dot for string `s`, fret `f` (fractional frets slide). */
+  pos: (s: number, f: number) => { x: number; y: number };
 }
 
 const INLAYS = [3, 5, 7, 9, 12, 15, 17, 19, 21];
@@ -42,8 +65,12 @@ function inkOn(fill: string): string {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5 ? "#0a0a0a" : "#fafafa";
 }
 
+/** A square on its point, `d` from centre to each corner. */
+const diamond = ({ x, y }: { x: number; y: number }, d: number) =>
+  `M${x} ${y - d}L${x + d} ${y}L${x} ${y + d}L${x - d} ${y}Z`;
+
 export default function Fretboard({
-  notes, maxFret = 22, onNoteClick, playOnClick = true, activeNote, fit = false, vertical = false,
+  notes, maxFret = 22, onNoteClick, playOnClick = true, activeNote, fit = false, vertical = false, overlay,
 }: Props) {
   // Everything is laid out in neck terms, `u` along the neck and `v` across
   // the strings, then turned into x/y at the end — so one drawing serves both
@@ -73,7 +100,8 @@ export default function Fretboard({
   }
   const at = (u: number, v: number) => (vertical ? { x: v, y: u } : { x: u, y: v });
   const fretLine = (f: number) => nut + f * fretL;
-  const fretMid = (f: number) => (f === 0 ? nut - 14 : nut + (f - 0.5) * fretL);
+  // Fractional frets glide smoothly from the open position into fret 1.
+  const fretMid = (f: number) => (f <= 0 ? nut - 14 : f < 1 ? nut - 14 + f * (fretL / 2 + 14) : nut + (f - 0.5) * fretL);
   const noteAtPos = (s: number, f: number) => at(fretMid(f), across(s));
   const acrossMid = (across(0) + across(5)) / 2;
   const acrossLo = Math.min(across(0), across(5));
@@ -136,8 +164,13 @@ export default function Fretboard({
               onNoteClick?.(n);
             }}
           >
-            <circle cx={noteAtPos(n.string, n.fret).x} cy={noteAtPos(n.string, n.fret).y} r={R}
-              fill={n.fill} stroke={n.ring ?? "transparent"} strokeWidth={2.5} />
+            {n.shape === "diamond" ? (
+              <path d={diamond(noteAtPos(n.string, n.fret), R * 1.4)}
+                fill={n.fill} stroke={n.ring ?? "transparent"} strokeWidth={2.5} strokeLinejoin="round" />
+            ) : (
+              <circle cx={noteAtPos(n.string, n.fret).x} cy={noteAtPos(n.string, n.fret).y} r={R}
+                fill={n.fill} stroke={n.ring ?? "transparent"} strokeWidth={2.5} />
+            )}
             <text x={noteAtPos(n.string, n.fret).x} y={noteAtPos(n.string, n.fret).y + R * 0.34} textAnchor="middle"
               fontSize={R * 0.9} fontWeight={700} fill={inkOn(n.fill)}>{n.label}</text>
           </g>
@@ -160,6 +193,10 @@ export default function Fretboard({
             </circle>
           </g>
         )}
+        {overlay?.({
+          vertical, R, fretL, stringGap, maxFret, at, across, fretLine, fretMid,
+          pos: (s, f) => at(fretMid(f), across(s)),
+        })}
       </svg>
     </div>
   );
