@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import BeatLine from "@/components/BeatLine";
 import Fretboard, { FbNote, FretGeo } from "@/components/Fretboard";
 import GripDiagram from "@/components/GripDiagram";
-import OutputPicker from "@/components/OutputPicker";
 import ProgressionStrip from "@/components/ProgressionStrip";
 import RiffLayer from "@/components/RiffLayer";
 import { Metronome, Voice, audioCtx, click, pluck, sticks } from "@/lib/audio";
@@ -559,11 +558,6 @@ export default function Page() {
           </>
         )}
       </div>
-
-      {/* Where the sound comes out: an amp over USB, or the speakers. */}
-      <footer className="w-full border-t border-neutral-200 pt-5">
-        <OutputPicker />
-      </footer>
 
       {/* The chord being dragged follows the pointer. */}
       {drag && name && scale && (
