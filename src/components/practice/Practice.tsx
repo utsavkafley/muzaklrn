@@ -1,5 +1,9 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+import {
+  INSTRUMENTS, currentInstrument, instrumentServerSnapshot, setInstrument, subscribeInstrument,
+} from "@/lib/instruments";
 import { STEPS } from "./steps";
 import { PracticeCtx } from "./types";
 
@@ -29,6 +33,7 @@ export default function Practice({
   ctx, onMove, canMove, step, setStep, sels, setSel, yourTurn, setYourTurn, canClimb, onClimb,
 }: Props) {
   const current = STEPS.find((s) => s.id === step) ?? STEPS[0];
+  const sound = useSyncExternalStore(subscribeInstrument, currentInstrument, instrumentServerSnapshot);
   const Options = current.Options;
   return (
     <section className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-3 sm:p-4">
@@ -71,6 +76,23 @@ export default function Practice({
       </div>
 
       <Options ctx={ctx} sel={sels[current.id] ?? current.initial} setSel={(s) => setSel(current.id, s)} />
+
+      {/* What the phrase is played on. Picking one plays the phrase in it. */}
+      <div className="flex flex-wrap items-center justify-center gap-1 text-sm">
+        <span className="mr-1 text-xs text-neutral-400">sound</span>
+        {INSTRUMENTS.map((x) => (
+          <button key={x.id} aria-pressed={sound === x.id}
+            onClick={() => {
+              setInstrument(x.id);
+              ctx.preview(current.phrase(ctx, sels[current.id] ?? current.initial));
+            }}
+            className={`rounded-full border px-3 py-0.5 transition-colors ${
+              sound === x.id ? "border-neutral-800 bg-neutral-800 text-neutral-50" : "border-neutral-200 text-neutral-500 hover:border-neutral-400 hover:text-neutral-800"
+            }`}>
+            {x.label}
+          </button>
+        ))}
+      </div>
       <p className="text-center text-xs leading-relaxed text-neutral-500">
         {current.how} <span className="text-neutral-400">Space plays and pauses; “your turn” leaves every other bar to you.</span>
       </p>

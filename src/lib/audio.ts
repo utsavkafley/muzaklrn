@@ -273,6 +273,162 @@ export function riffNote(o: {
   };
 }
 
+/**
+ * How a synthesized instrument is built: a few oscillators stacked as its
+ * partials, a filter for its colour, an envelope for how it speaks and
+ * dies, and the extras that make it itself — breath for a flute, tape wobble
+ * for a mellotron, a hammer's knock for a piano.
+ */
+export interface InstrumentSpec {
+  partials: { type: OscillatorType; ratio: number; gain: number; detune?: number }[];
+  filter: { type: BiquadFilterType; from: number; to: number; q?: number; sweep: number };
+  /** Seconds to full level: struck (picked) and legato (hammer, pull, slide in). */
+  attack: number;
+  legatoAttack: number;
+  peak: number;
+  /** Level held through the note, as a share of the peak; 0 decays like a struck string. */
+  sustain: number;
+  /** Time constant of the fall from peak to sustain (or to silence). */
+  decay: number;
+  release: number;
+  /** Breath noise level, bandpassed near the pitch: a flute's air. */
+  breath?: number;
+  /** Slow and fast pitch wobble, in cents: tape. */
+  wow?: { rate: number; cents: number }[];
+  /** Vibrato it plays by itself as a note settles, in cents. */
+  vibrato?: { rate: number; cents: number; delay: number };
+  /** A short knock at the start, as a piano hammer. */
+  knock?: number;
+}
+
+/**
+ * One note on a synthesized instrument, with the same technique handling as
+ * a guitar note: glides for slides and bends, a softer legato start where
+ * the guitar would hammer or pull, and vibrato on request.
+ */
+export function synthNote(spec: InstrumentSpec, o: {
+  midi: number; when: number; dur: number; picked: boolean; glides?: Glide[]; vibrato?: boolean;
+}): Voice {
+  const ac = audioCtx();
+  const { when: t, dur } = o;
+  const f = midiToFreq(o.midi);
+  const end = t + dur + spec.release + 0.1;
+
+  const g = ac.createGain();
+  const filter = ac.createBiquadFilter();
+  filter.type = spec.filter.type;
+  filter.Q.value = spec.filter.q ?? 0.7;
+  filter.frequency.setValueAtTime(Math.min(f * spec.filter.from, 16000), t);
+  filter.frequency.setTargetAtTime(Math.min(Math.max(f * spec.filter.to, 200), 16000), t + 0.01, spec.filter.sweep);
+  filter.connect(g).connect(out());
+
+  // Pitch wobble and vibrato ride on every partial's detune, in cents.
+  const wobble = ac.createGain();
+  wobble.gain.value = 1;
+  const lfos: OscillatorNode[] = [];
+  const addLfo = (rate: number, cents: number, from: number, rampTo: number) => {
+    const lfo = ac.createOscillator();
+    lfo.frequency.value = rate;
+    const depth = ac.createGain();
+    depth.gain.setValueAtTime(0, t);
+    depth.gain.linearRampToValueAtTime(0, from);
+    depth.gain.linearRampToValueAtTime(cents, rampTo);
+    lfo.connect(depth).connect(wobble);
+    lfo.start(t);
+    lfo.stop(end);
+    lfos.push(lfo);
+  };
+  for (const w of spec.wow ?? []) addLfo(w.rate, w.cents, t, t + 0.05);
+  if (spec.vibrato) addLfo(spec.vibrato.rate, spec.vibrato.cents, t + spec.vibrato.delay, t + spec.vibrato.delay + 0.3);
+  if (o.vibrato) addLfo(5.5, 28, t + dur * 0.2, t + dur * 0.5);
+
+  const oscs = spec.partials.map((p) => {
+    const osc = ac.createOscillator();
+    osc.type = p.type;
+    osc.detune.value = p.detune ?? 0;
+    wobble.connect(osc.detune);
+    osc.frequency.setValueAtTime(f * p.ratio, t);
+    let cur = o.midi;
+    for (const gl of o.glides ?? []) {
+      if (gl.stepped) {
+        const n = Math.abs(gl.midi - cur);
+        const dir = Math.sign(gl.midi - cur);
+        for (let k = 1; k <= n; k++) osc.frequency.setValueAtTime(midiToFreq(cur + dir * k) * p.ratio, gl.at + (gl.dur * k) / n);
+      } else {
+        osc.frequency.setValueAtTime(midiToFreq(cur) * p.ratio, gl.at);
+        osc.frequency.linearRampToValueAtTime(midiToFreq(gl.midi) * p.ratio, gl.at + gl.dur);
+      }
+      cur = gl.midi;
+    }
+    const pg = ac.createGain();
+    pg.gain.value = p.gain;
+    osc.connect(pg).connect(filter);
+    osc.start(t);
+    osc.stop(end);
+    return osc;
+  });
+
+  // Breath: noise through a band near the note, loudest as the note starts.
+  let noise: AudioBufferSourceNode | null = null;
+  if (spec.breath) {
+    const buf = ac.createBuffer(1, Math.ceil(ac.sampleRate * 0.5), ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    noise = ac.createBufferSource();
+    noise.buffer = buf;
+    noise.loop = true;
+    const bp = ac.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = Math.min(f * 2, 9000);
+    bp.Q.value = 1.2;
+    const ng = ac.createGain();
+    ng.gain.setValueAtTime(0, t);
+    ng.gain.linearRampToValueAtTime(spec.breath * (o.picked ? 3 : 1.5), t + 0.03);
+    ng.gain.setTargetAtTime(spec.breath, t + 0.04, 0.08);
+    noise.connect(bp).connect(ng).connect(g);
+    noise.start(t);
+    noise.stop(end);
+  }
+
+  // A hammer's knock: a very short, low thump under a struck note.
+  if (spec.knock && o.picked) {
+    const k = ac.createOscillator();
+    k.type = "sine";
+    k.frequency.setValueAtTime(f * 0.5 + 60, t);
+    k.frequency.exponentialRampToValueAtTime(40, t + 0.04);
+    const kg = ac.createGain();
+    kg.gain.setValueAtTime(spec.knock, t);
+    kg.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    k.connect(kg).connect(out());
+    k.start(t);
+    k.stop(t + 0.06);
+  }
+
+  // The envelope: in, down to its sustain (or away, for a struck string),
+  // held for the note, then released.
+  const attack = o.picked ? spec.attack : spec.legatoAttack;
+  const peak = spec.peak * (o.picked ? 1 : 0.85);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(peak, t + attack);
+  g.gain.setTargetAtTime(Math.max(peak * spec.sustain, 0.0001), t + attack, spec.decay);
+  g.gain.setTargetAtTime(0.0001, t + dur, spec.release / 3);
+
+  return {
+    stop(when?: number) {
+      const at = Math.max(when ?? ac.currentTime, ac.currentTime);
+      try {
+        fadeOut(g, at, t, 0.04);
+        const off = at + 0.08;
+        oscs.forEach((x) => x.stop(off));
+        lfos.forEach((x) => x.stop(off));
+        noise?.stop(off);
+      } catch {
+        /* already stopped */
+      }
+    },
+  };
+}
+
 /** Piano-style block chord: all notes struck together, not staggered. */
 export function blockChord(midis: number[], when?: number, vol = 0.35) {
   const ac = audioCtx();

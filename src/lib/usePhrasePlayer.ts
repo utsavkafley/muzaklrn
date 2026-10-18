@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import type { BarClock } from "@/components/BeatLine";
 import type { Phrase } from "@/components/practice/types";
-import { Glide, Voice, riffNote } from "./audio";
+import { Glide, Voice, riffNote, synthNote } from "./audio";
+import { currentInstrument, specOf } from "./instruments";
 import { audioCtx } from "./audio";
 import { RiffEvent, RiffNote, barsOf, midiOf, moveWindow, timeline } from "./riffs";
 
@@ -14,6 +15,8 @@ import { RiffEvent, RiffNote, barsOf, midiOf, moveWindow, timeline } from "./rif
  */
 export function playBar(notes: RiffNote[], barStart: number, secPerEighth: number, voices: Voice[]): RiffEvent[] {
   const evs = timeline(notes, barStart, secPerEighth);
+  // The chosen voice, read as each bar is laid down: a change lands on the next bar.
+  const spec = specOf(currentInstrument());
   const ringing: Record<number, Voice> = {};
   for (const e of evs) {
     ringing[e.string]?.stop(e.start);
@@ -29,11 +32,12 @@ export function playBar(notes: RiffNote[], barStart: number, secPerEighth: numbe
       glides.push({ at: m0, dur: m1 - m0, midi });
       midi += e.to - e.fret;
     }
-    const v = riffNote({
+    const note = {
       midi, when: e.start, dur: e.end - e.start, glides,
       picked: e.tech !== "hammer" && e.tech !== "pull" && e.tech !== "release",
       vibrato: e.tech === "vibrato",
-    });
+    };
+    const v = spec ? synthNote(spec, note) : riffNote(note);
     voices.push(v);
     ringing[e.string] = v;
   }
@@ -54,6 +58,8 @@ export function usePhrasePlayer(voices: React.RefObject<Voice[]>) {
   const clock = useRef<BarClock[]>([]);
   const [previewing, setPreviewing] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The last preview's notes, cut off when another starts. */
+  const previewed = useRef<Voice[]>([]);
 
   /** Mark a bar on the clock, and sound `notes` in it if there are any. */
   const bar = (entry: BarClock, notes: RiffNote[] | null) => {
@@ -75,9 +81,12 @@ export function usePhrasePlayer(voices: React.RefObject<Voice[]>) {
     const all = p.notesFor(null, 0);
     const len = barsOf(all);
     reset();
+    previewed.current.forEach((v) => v.stop());
+    const from = voices.current.length;
     for (let part = 0; part < len; part++) {
       bar({ start: at + part * 8 * spe, secPerEighth: spe, countIn: false, yours: false, part }, barOf(all, part));
     }
+    previewed.current = voices.current.slice(from);
     setPreviewing(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setPreviewing(false), (len * 8 * spe + 0.4) * 1000);
