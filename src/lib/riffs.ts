@@ -180,27 +180,10 @@ export const LICKS: Riff[] = [
     notes: [n(0, 2, 7, 1), n(1, 3, 5, 1), n(2, 3, 8, 1), n(3, 4, 8, 1), n(4, 4, 6, 1, "pull"), n(5, 4, 4, 1, "pull"), n(6, 2, 7, 2)] },
 ];
 
-const REF_ROOT = 9; // written in A
 
 export const riffsFor = (mode: ModeId) => RIFFS.filter((r) => r.modes.includes(mode));
 export const licksFor = (mode: ModeId) => LICKS.filter((r) => r.modes.includes(mode));
 
-/** Every fret a riff touches, slide and bend targets included. */
-const fretsOf = (r: Riff) => r.notes.flatMap((x) => (x.to === undefined ? [x.fret] : [x.fret, x.to]));
-
-/**
- * How far to slide a riff, in frets, to put it in `keyPc` and then `extra`
- * semitones above (for following a chord). Of the two ways round, up or
- * down, take the one that stays on the neck, nearer the nut on a tie.
- */
-export function riffShift(r: Riff, keyPc: number, extra = 0, maxFret = 15): number {
-  const d = (((keyPc - REF_ROOT + extra) % 12) + 12) % 12;
-  const frets = fretsOf(r);
-  const fits = (s: number) => frets.every((f) => f + s >= 0 && f + s <= maxFret);
-  const options = [d, d - 12].filter(fits);
-  if (!options.length) return d - 12 >= -Math.min(...frets) ? d - 12 : d;
-  return options.reduce((a, b) => (Math.abs(a) <= Math.abs(b) ? a : b));
-}
 
 export const shifted = (r: Riff, by: number): RiffNote[] =>
   r.notes.map((x) => ({ ...x, fret: x.fret + by, to: x.to === undefined ? undefined : x.to + by }));

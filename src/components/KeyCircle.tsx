@@ -1,6 +1,16 @@
-import { DiatonicChord, MOOD_FILL } from "@/lib/harmony";
-import { MODES } from "@/lib/modes";
-import { StudyCtx, defineModule } from "./types";
+import { ChordRef, DiatonicChord, MOOD_FILL } from "@/lib/harmony";
+import { MODES, Mode } from "@/lib/modes";
+
+/** What the circle needs to know about the page, and the two things it can change. */
+export interface CircleCtx {
+  keyPc: number;
+  name: string;
+  scale: number[];
+  mode: Mode | null;
+  chordOf: (ref: ChordRef) => DiatonicChord;
+  setKey: (text: string) => void;
+  setShown: (intervals: number[]) => void;
+}
 
 /** Clockwise from the top: each step a fifth up, one more sharp (or one fewer flat). */
 const MAJOR = ["C", "G", "D", "A", "E", "B", "F♯", "D♭", "A♭", "E♭", "B♭", "F"];
@@ -28,7 +38,7 @@ function placeChord(c: DiatonicChord, keyPc: number): { slot: number; inner: boo
   return null;
 }
 
-function Circle({ ctx }: { ctx: StudyCtx }) {
+function Circle({ ctx }: { ctx: CircleCtx }) {
   const S = 340, C = S / 2;
   const R_OUT = 150, R_MID = 112, R_IN = 74;
   const angle = (slot: number) => ((slot * 30 - 90) * Math.PI) / 180;
@@ -94,44 +104,40 @@ function Circle({ ctx }: { ctx: StudyCtx }) {
 /**
  * The circle of fifths, explained from where you are: your key's chords lit
  * on it in their moods, home ringed, the neighbourhood they share shaded,
- * and a tap on any key to go there.
+ * and a tap on any key to go there. Reference, opened beside the mode
+ * picker, rather than something to practise.
  */
-export const circleModule = defineModule<null>({
-  id: "circle",
-  label: "Circle of fifths",
-  initial: null,
-  Panel: ({ ctx }) => {
-    const relDown = ctx.mode?.relativeMajorDown ?? 0;
-    const parentPc = (ctx.keyPc - relDown + 12) % 12;
-    const parentSlot = slotOf(parentPc);
-    const parentName = MAJOR[parentSlot];
-    const isMajor = ctx.mode?.id === "ionian";
-    return (
-      <div className="grid items-center gap-6 sm:grid-cols-[1fr_1fr]">
-        <Circle ctx={ctx} />
-        <ul className="space-y-3 text-sm leading-relaxed text-neutral-700">
+export default function KeyCircle({ ctx }: { ctx: CircleCtx }) {
+  const relDown = ctx.mode?.relativeMajorDown ?? 0;
+  const parentPc = (ctx.keyPc - relDown + 12) % 12;
+  const parentSlot = slotOf(parentPc);
+  const parentName = MAJOR[parentSlot];
+  const isMajor = ctx.mode?.id === "ionian";
+  return (
+    <div className="grid items-center gap-6 sm:grid-cols-[1fr_1fr]">
+      <Circle ctx={ctx} />
+      <ul className="space-y-3 text-sm leading-relaxed text-neutral-700">
+        <li>
+          <b className="text-neutral-900">Clockwise is a fifth up.</b> Each step adds one sharp to the key
+          (or drops a flat); counter-clockwise is a fourth up, adding a flat.
+        </li>
+        <li>
+          <b className="text-neutral-900">Neighbours share six of their seven notes.</b> That makes one step
+          round the circle the smoothest key change there is.
+        </li>
+        <li>
+          <b className="text-neutral-900">Your key&apos;s chords sit together.</b> In the shaded wedge: three
+          major chords side by side on the outside — {`I, IV and V of ${parentName} major — their relative minors beneath them, and the diminished chord one step on.`} Colours are the chords&apos; moods; home is ringed.
+        </li>
+        {ctx.mode && !isMajor && (
           <li>
-            <b className="text-neutral-900">Clockwise is a fifth up.</b> Each step adds one sharp to the key
-            (or drops a flat); counter-clockwise is a fourth up, adding a flat.
+            <b className="text-neutral-900">{ctx.name} {ctx.mode.name} uses {parentName} major&apos;s notes</b>
+            {" "}({SIG[parentSlot]}), with {ctx.name} as home instead of {parentName}. Same neighbourhood on the
+            circle, different chord ringed — that is all a mode is.
           </li>
-          <li>
-            <b className="text-neutral-900">Neighbours share six of their seven notes.</b> That makes one step
-            round the circle the smoothest key change there is.
-          </li>
-          <li>
-            <b className="text-neutral-900">Your key&apos;s chords sit together.</b> In the shaded wedge: three
-            major chords side by side on the outside — {`I, IV and V of ${parentName} major — their relative minors beneath them, and the diminished chord one step on.`} Colours are the chords&apos; moods; home is ringed.
-          </li>
-          {ctx.mode && !isMajor && (
-            <li>
-              <b className="text-neutral-900">{ctx.name} {ctx.mode.name} uses {parentName} major&apos;s notes</b>
-              {" "}({SIG[parentSlot]}), with {ctx.name} as home instead of {parentName}. Same neighbourhood on the
-              circle, different chord ringed — that is all a mode is.
-            </li>
-          )}
-          <li className="text-neutral-500">Tap any key to go there: outside for major, inside for minor.</li>
-        </ul>
-      </div>
-    );
-  },
-});
+        )}
+        <li className="text-neutral-500">Tap any key to go there: outside for major, inside for minor.</li>
+      </ul>
+    </div>
+  );
+}

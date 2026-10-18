@@ -98,7 +98,30 @@ const STEPS: Record<ChordKind, number[]> = {
 export interface ChordRef {
   degree: number;
   kind: ChordKind;
+  /**
+   * Built from this shape on the degree's root instead of from the scale —
+   * a chord from outside the key, as when ii is lifted to II (or II7) to
+   * lean toward V.
+   */
+  alt?: AltShape;
 }
+
+/** Chord shapes, as semitones above the root, a chord can be altered to. */
+export const ALT_SHAPES = {
+  maj: [4, 7],
+  min: [3, 7],
+  "7": [4, 7, 10],
+  maj7: [4, 7, 11],
+  m7: [3, 7, 10],
+  sus2: [2, 7],
+  sus4: [5, 7],
+  dim: [3, 6],
+  "m7♭5": [3, 6, 10],
+  aug: [4, 8],
+} as const;
+export type AltShape = keyof typeof ALT_SHAPES;
+/** Letters each interval climbs from the root, for spelling: 3rd two, 5th four, 7th six. */
+const LETTER_STEPS: Record<number, number> = { 2: 1, 3: 2, 4: 2, 5: 3, 6: 4, 7: 4, 8: 4, 9: 6, 10: 6, 11: 6 };
 
 export interface DiatonicChord extends ChordRef {
   /** Semitones of the chord's root above the key's root. */
@@ -148,7 +171,9 @@ export function scaleOf(shown: number[]): number[] | null {
  * doesn't fit there: a sus chord needs its 2nd or 4th and its 5th to be the
  * plain ones (Lydian's I has a ♯4, so no Isus4; nothing sus sits on a °).
  */
-export function buildChord(keyName: string, scale: number[], { degree, kind }: ChordRef): DiatonicChord | null {
+export function buildChord(keyName: string, scale: number[], ref: ChordRef): DiatonicChord | null {
+  if (ref.alt) return buildAltered(keyName, scale, ref.degree, ref.alt);
+  const { degree, kind } = ref;
   const degs = STEPS[kind].map((st) => (degree + st) % 7);
   const above = STEPS[kind].map((st) => scale[(degree + st) % 7] + (degree + st >= 7 ? 12 : 0) - scale[degree]);
   const spec = SHAPES[above.slice(1).join(",")];
@@ -183,6 +208,65 @@ export function buildChord(keyName: string, scale: number[], { degree, kind }: C
     ...chord, mood: "away",
     why: `no half-step pull, ${shared.length ? `only ${noteName(shared[0])} in common with home` : "nothing in common with home"}`,
   };
+}
+
+/**
+ * A chord of `shape` on the root of `degree`, notes and all, whether or not
+ * the key holds them. Its mood follows the same rule as any chord, plus one:
+ * a note from outside the key is a note that wants to move — it leans by a
+ * half step to the key note beside it — so it reads as tension.
+ */
+function buildAltered(keyName: string, scale: number[], degree: number, shape: AltShape): DiatonicChord {
+  const ivs = ALT_SHAPES[shape];
+  const semis = scale[degree];
+  const spec = SHAPES[ivs.join(",")];
+  const off = semis - MAJOR[degree];
+  const acc = off < 0 ? "♭" : off > 0 ? "♯" : "";
+  const tones = [semis, ...ivs.map((i) => (semis + i) % 12)];
+  // Spell each tone by letters from the root: a 3rd is two letters up, and so on.
+  const spellTone = (k: number) =>
+    k === 0 ? spellInterval(keyName, semis, degree) : spellInterval(keyName, tones[k], (degree + LETTER_STEPS[ivs[k - 1]]) % 7);
+  const kind: ChordKind = ivs.length === 3 ? "seventh" : ivs[0] === 2 ? "sus2" : ivs[0] === 5 ? "sus4" : "triad";
+  const chord = {
+    degree, kind, alt: shape, semis, tones, shape: spec.shape,
+    numeral: acc + (spec.upper ? ROMAN[degree] : ROMAN[degree].toLowerCase()) + spec.num,
+    name: spellTone(0) + spec.sym,
+  };
+  const home = [scale[0], scale[2], scale[4]];
+  const homeName = (t: number) => spellInterval(keyName, t, scale.indexOf(t));
+  const shared = tones.filter((t) => home.includes(t));
+  if (degree === 0 && shared.length >= 2 && tones.every((t) => scale.includes(t))) {
+    return { ...chord, mood: "home", why: "is home" };
+  }
+  const outside = tones.findIndex((t) => !scale.includes(t));
+  if (outside >= 0) {
+    const t = tones[outside];
+    // Raised or lowered against the key's own note of that letter: a raised
+    // note (F♯ where the key has F) leans up a half step, a lowered one down.
+    const letter = outside === 0 ? degree : (degree + LETTER_STEPS[ivs[outside - 1]]) % 7;
+    const raised = (t - scale[letter] + 12) % 12 <= 6;
+    const target = raised ? (t + 1) % 12 : (t + 11) % 12;
+    const tLetter = raised ? (letter + 1) % 7 : (letter + 6) % 7;
+    const tName = spellInterval(keyName, target, tLetter);
+    return { ...chord, mood: "tension", why: `${spellTone(outside)} isn't in the key — it leans a half step to ${tName}` };
+  }
+  if (shared.length >= 2) {
+    return { ...chord, mood: "home", why: `shares ${shared.map(homeName).join(" and ")} with home` };
+  }
+  const pull = tones.find((t) => t === 11 || t === 1);
+  if (pull !== undefined) {
+    return { ...chord, mood: "tension", why: `${homeName(pull)}, a half step ${pull === 11 ? "below" : "above"} ${homeName(0)}, pulls home` };
+  }
+  return { ...chord, mood: "away", why: "no half-step pull and little in common with home" };
+}
+
+/**
+ * What a bar's chord can be turned into: the same root as every other shape.
+ * In-key ones keep their key's colour; the rest lean out of it — ii lifted
+ * to II or II7 is the classic, leaning into V.
+ */
+export function variantsOf(keyName: string, scale: number[], degree: number): DiatonicChord[] {
+  return (Object.keys(ALT_SHAPES) as AltShape[]).map((shape) => buildAltered(keyName, scale, degree, shape));
 }
 
 /**

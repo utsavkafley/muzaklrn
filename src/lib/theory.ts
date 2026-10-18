@@ -291,6 +291,9 @@ const OPEN_SHAPES: Record<string, ChordShape> = {
   "G add9": { frets: [3, 0, 0, 2, 0, 3], base: 1 },
 };
 
+/** The open-position shape for a chord, if it has a common one. */
+export const openShape = (c: Chord): ChordShape | null => OPEN_SHAPES[`${c.root} ${c.quality}`] ?? null;
+
 /** E-shape (root on string 6) and A-shape (root on string 5) barre templates, offsets from barre fret. */
 const BARRE_E: Record<ChordQuality, number[]> = {
   maj: [0, 2, 2, 1, 0, 0], min: [0, 2, 2, 0, 0, 0], "7": [0, 2, 0, 1, 0, 0],

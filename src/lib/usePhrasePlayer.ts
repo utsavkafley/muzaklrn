@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { BarClock } from "@/components/BeatLine";
-import type { Phrase } from "@/components/study/types";
+import type { Phrase } from "@/components/practice/types";
 import { Glide, Voice, riffNote } from "./audio";
 import { audioCtx } from "./audio";
 import { RiffEvent, RiffNote, barsOf, midiOf, moveWindow, timeline } from "./riffs";
@@ -72,7 +72,7 @@ export function usePhrasePlayer(voices: React.RefObject<Voice[]>) {
   const preview = (p: Phrase, bpm: number) => {
     const spe = 60 / bpm / 2;
     const at = audioCtx().currentTime + 0.08;
-    const all = p.notesFor(null);
+    const all = p.notesFor(null, 0);
     const len = barsOf(all);
     reset();
     for (let part = 0; part < len; part++) {

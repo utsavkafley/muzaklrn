@@ -6,8 +6,8 @@ import { audioCtx } from "@/lib/audio";
 import { RiffEvent, RiffNote, moveWindow, steps } from "@/lib/riffs";
 
 const INK = "#18181b";
-const BOARD = "#fafaf9";
-const STRING = "#8b8b93";
+const BOARD = "#ffffff";
+const STRING = "#a8a29e";
 
 interface Props {
   geo: FretGeo;
@@ -22,6 +22,10 @@ interface Props {
   colorOf: (string: number, fret: number) => string;
   /** A riff note outside the key has no dot under it; this draws one. */
   outside: (string: number, fret: number) => string | null;
+  /** Number the notes in playing order; off for a line through chords. */
+  numbered?: boolean;
+  /** Where the next bar begins: ringed twice and tagged "next". */
+  targets?: RiffNote[];
 }
 
 /**
@@ -32,7 +36,7 @@ interface Props {
  * travelling up the string on a slide, and on a bend the string itself
  * bowing as the dot rises and its colour turns into the note it reaches.
  */
-export default function RiffLayer({ geo, notes, lands, events, live, colorOf, outside }: Props) {
+export default function RiffLayer({ geo, notes, lands, events, live, colorOf, outside, numbered = true, targets = [] }: Props) {
   const [frame, setFrame] = useState<{ now: number; on: RiffEvent[] }>({ now: 0, on: [] });
 
   useEffect(() => {
@@ -52,7 +56,17 @@ export default function RiffLayer({ geo, notes, lands, events, live, colorOf, ou
     <g pointerEvents="none">
       {/* Bent strings first, so the map and the moving dots sit on top. */}
       {on.map((e) => <Live key={`s${e.start}-${e.string}`} part="string" geo={geo} e={e} now={frame.now} colorOf={colorOf} />)}
-      <Ghosts geo={geo} notes={notes} lands={lands} faded={on.length > 0} colorOf={colorOf} outside={outside} />
+      <Ghosts geo={geo} notes={notes} lands={lands} faded={on.length > 0} colorOf={colorOf} outside={outside} numbered={numbered} />
+      {targets.map((t) => {
+        const p = geo.pos(t.string, t.fret);
+        return (
+          <g key={`t${t.string}:${t.fret}`}>
+            <circle cx={p.x} cy={p.y} r={geo.R + 7} fill="none" stroke={INK} strokeWidth={2} strokeDasharray="4 3" />
+            <text x={p.x} y={p.y + geo.R + 19} fontSize={9} fontWeight={700} textAnchor="middle" fill={INK}
+              stroke="#fff" strokeWidth={3} paintOrder="stroke">next</text>
+          </g>
+        );
+      })}
       {on.map((e) => <Live key={`d${e.start}-${e.string}`} part="dot" geo={geo} e={e} now={frame.now} colorOf={colorOf} />)}
     </g>
   );
@@ -63,8 +77,8 @@ const bendDir = (s: number) => (s >= 3 ? -1 : 1);
 /** How far across the strings one semitone of bend moves the dot. */
 const PER_SEMI = 0.42;
 
-function Ghosts({ geo, notes, lands, faded, colorOf, outside }: {
-  geo: FretGeo; notes: RiffNote[]; lands?: boolean; faded: boolean;
+function Ghosts({ geo, notes, lands, faded, colorOf, outside, numbered }: {
+  geo: FretGeo; notes: RiffNote[]; lands?: boolean; faded: boolean; numbered: boolean;
   colorOf: Props["colorOf"]; outside: Props["outside"];
 }) {
   const { pos, R } = geo;
@@ -138,8 +152,12 @@ function Ghosts({ geo, notes, lands, faded, colorOf, outside }: {
             {landing && landing.string === s && landing.fret === f && (
               <circle cx={p.x} cy={p.y} r={R + 7} fill="none" stroke={INK} strokeWidth={1.25} />
             )}
-            <rect x={p.x + R * 0.55} y={p.y - R - 9} width={w} height={12} rx={6} fill="#fff" stroke={INK} strokeWidth={1} />
-            <text x={p.x + R * 0.55 + w / 2} y={p.y - R - 0.5} fontSize={8.5} fontWeight={700} textAnchor="middle" fill={INK}>{label}</text>
+            {numbered && (
+              <>
+                <rect x={p.x + R * 0.55} y={p.y - R - 9} width={w} height={12} rx={6} fill="#fff" stroke={INK} strokeWidth={1} />
+                <text x={p.x + R * 0.55 + w / 2} y={p.y - R - 0.5} fontSize={8.5} fontWeight={700} textAnchor="middle" fill={INK}>{label}</text>
+              </>
+            )}
           </g>
         );
       })}

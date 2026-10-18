@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import BeatLine from "@/components/BeatLine";
 import Fretboard, { FbNote, FretGeo } from "@/components/Fretboard";
-import GripDiagram from "@/components/GripDiagram";
+import ChordHover from "@/components/ChordHover";
 import ProgressionStrip from "@/components/ProgressionStrip";
 import RiffLayer from "@/components/RiffLayer";
 import { Metronome, Voice, audioCtx, click, pluck, sticks } from "@/lib/audio";
@@ -11,14 +11,22 @@ import { MODES } from "@/lib/modes";
 import { NoteName, fretNotesFor, noteIndex, parseNote, pitchAt, spellInterval, spellNote } from "@/lib/theory";
 import {
   ChordKind, ChordRef, DiatonicChord, INTERVALS, KINDS, MOOD_FILL, MOOD_TINT, Mood,
-  buildOrTriad, diatonicChords, fullGrip, minimalGrip, noteMood, scaleOf, spelled, voicing,
+  buildOrTriad, diatonicChords, noteMood, scaleOf, spelled, variantsOf, voicing,
 } from "@/lib/harmony";
 import { Bar, presetsFor } from "@/lib/progressions";
+import { fretTip } from "@/lib/fretTips";
+import {
+  SavedProgression, deleteProgression, saveProgression, savedServerSnapshot, savedSnapshot, subscribeSaved,
+} from "@/lib/saved";
 import { DropSpot, useChordDrag } from "@/lib/useChordDrag";
 import { RiffNote, barsOf } from "@/lib/riffs";
 import { barOf, usePhrasePlayer } from "@/lib/usePhrasePlayer";
-import StudyPanel, { MODULES, Pass } from "@/components/study/StudyPanel";
-import { Phrase, StudyCtx } from "@/components/study/types";
+import KeyCircle from "@/components/KeyCircle";
+import Practice from "@/components/practice/Practice";
+import { STEPS } from "@/components/practice/steps";
+import { Phrase, PracticeCtx } from "@/components/practice/types";
+import { roleLabel } from "@/lib/lines";
+import { homeFret } from "@/lib/shapes";
 
 const MAX_FRET = 15;
 const COUNT_OFF = 4;
@@ -56,21 +64,17 @@ export default function Page() {
   /** Which kind of chord the chord row offers: triads, sevenths, sus. */
   const [kind, setKind] = useState<ChordKind>("triad");
   const chords = useMemo(() => (name ? diatonicChords(name, shown, kind) : null), [name, shown, kind]);
-  // Fingerings search the neck; worked out once per chord set, not on every
-  // beat's re-render, so the metronome's scheduler never waits on them.
-  const grips = useMemo(
-    () => (note && chords ? chords.map((c) => (c ? { full: fullGrip(note, c), three: minimalGrip(note, c) } : null)) : []),
-    [note, chords],
-  );
   const chordOf = (ref: ChordRef) => buildOrTriad(name!, scale!, ref);
 
-  // ---- study: riffs, licks, arpeggios, triads, the circle ----
-  const [tab, setTab] = useState(MODULES[0].id);
-  /** Each module's own selection, kept when you switch tabs. */
+  // ---- practice: chord tones, shapes, phrases, in one hand position ----
+  const [step, setStep] = useState(STEPS[0].id);
+  /** Each step's own options, kept when you switch steps. */
   const [sels, setSels] = useState<Record<string, unknown>>({});
-  const [pass, setPass] = useState<Pass>("hear");
-  /** Move the phrase with each bar's chord. */
-  const [follow, setFollow] = useState(false);
+  /** Trade bars with the app: it plays one, you answer the next. */
+  const [yourTurn, setYourTurn] = useState(false);
+  /** The hand position, in frets from the key's home position. */
+  const [shift, setShift] = useState(0);
+  const [circleOpen, setCircleOpen] = useState(false);
 
   // ---- progression ----
   // Bars hold degrees and kinds, not chords, so a progression follows the key
@@ -144,6 +148,24 @@ export default function Page() {
     setHeld(null);
   };
 
+  /** Holding a bar changes its chord, in the key or out of it. */
+  const alterChord = (bar: number, half: number, ref: ChordRef) => {
+    audition(ref);
+    setBars(bars.map((b, k) => (k === bar ? b.map((r, h) => (h === half ? ref : r)) : b)));
+  };
+
+  // ---- saved progressions ----
+  const saved = useSyncExternalStore(subscribeSaved, savedSnapshot, savedServerSnapshot);
+  const canSave = !!(name && scale && bars.some((b) => b.length));
+  const save = () => {
+    if (!name || !scale) return;
+    const numerals = bars.filter((b) => b.length).map((b) => b.map((r) => chordOf(r).numeral).join("·")).join(" – ");
+    saveProgression({
+      name: `${name} ${mode?.name ?? "custom"} · ${numerals}`,
+      key: text, shown, bars, bpm,
+    });
+  };
+
   // ---- metronome ----
   const [bpmText, setBpmText] = useState("90");
   const parsedBpm = parseInt(bpmText, 10);
@@ -158,12 +180,16 @@ export default function Page() {
   /** Phrases on the clock: bars for the beat line, notes for the neck. */
   const player = usePhrasePlayer(voices);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /**
+   * Pause and play: the progression picks up at the bar it was on. `resumeAt`
+   * is where the next start begins; `atBar` tracks where it is now.
+   */
+  const resumeAt = useRef(0);
+  const atBar = useRef(0);
   /** What the clock plays, kept current for a tick callback that outlives renders. */
   const prog = useRef<{ bar: number; halves: number[][]; chord: DiatonicChord }[]>([]);
   /** The phrase and how it is being learned, for the same tick callback. */
-  const phraseCfg = useRef<{ phrase: Phrase | null; pass: Pass; follow: boolean }>({
-    phrase: null, pass: "hear", follow: false,
-  });
+  const phraseCfg = useRef<{ phrase: Phrase | null; yourTurn: boolean }>({ phrase: null, yourTurn: false });
 
   useEffect(() => {
     prog.current = note && name && scale
@@ -175,6 +201,8 @@ export default function Page() {
         }]
         : []))
       : [];
+    // A different progression starts from its top.
+    resumeAt.current = 0;
   }, [note, name, scale, bars]);
 
   const silence = () => {
@@ -187,6 +215,7 @@ export default function Page() {
   };
 
   const stop = () => {
+    resumeAt.current = atBar.current;
     silence();
     setRunning(false);
     setBeat(null);
@@ -206,9 +235,11 @@ export default function Page() {
       voices.current.push(countIn ? sticks(t.when) : click(t.when, t.sub === 0));
       let bar = -1, half = 0;
       const p = prog.current;
-      const { phrase: ph, pass: ps, follow: fl } = phraseCfg.current;
+      const { phrase: ph, yourTurn: turns } = phraseCfg.current;
       const barNum = Math.floor((t.count - COUNT_OFF) / 4);
-      const b = !countIn && p.length ? p[barNum % p.length] : null;
+      const idx = p.length ? (barNum + resumeAt.current) % p.length : 0;
+      const b = !countIn && p.length ? p[idx] : null;
+      if (b && t.sub === 0) atBar.current = idx;
       if (b) {
         bar = b.bar;
         half = b.halves.length === 2 && t.sub >= 2 ? 1 : 0;
@@ -218,17 +249,17 @@ export default function Page() {
         }
       }
       if (t.sub === 0) {
-        // A phrase may run several bars; echo trades its whole length, the
-        // phrase and then your answer.
+        // A phrase may run several bars; "your turn" trades its whole
+        // length, the phrase and then your answer.
         let plays = false, yours = false, part = 0;
         let notes: RiffNote[] = [];
         if (!countIn && ph) {
-          const all = ph.notesFor(fl && b ? b.chord : null);
+          const all = ph.notesFor(b ? b.chord : null, idx);
           const len = barsOf(all);
           part = barNum % len;
-          const cycle = ps === "echo" ? barNum % (2 * len) : barNum;
-          plays = ps === "loop" || (ps === "hear" && barNum < len) || (ps === "echo" && cycle < len);
-          yours = ps === "echo" && cycle >= len;
+          const cycle = turns ? barNum % (2 * len) : 0;
+          plays = cycle < len;
+          yours = cycle >= len;
           notes = barOf(all, part);
         }
         player.bar({ start: t.when, secPerEighth: 60 / m.bpm / 2, countIn, yours, part }, plays ? notes : null);
@@ -249,6 +280,35 @@ export default function Page() {
     if (met.current) met.current.bpm = bpm;
   }, [bpm]);
 
+  // Space plays and pauses, from anywhere on the page. The two boxes never
+  // need a space (a note name, a tempo), so they don't swallow it either.
+  const playPause = useRef<() => void>(() => {});
+  useEffect(() => {
+    playPause.current = running ? stop : start;
+  });
+  useEffect(() => {
+    const isSpace = (e: KeyboardEvent) => e.code === "Space" || e.key === " ";
+    const typing = (el: EventTarget | null) => {
+      const t = el as HTMLElement | null;
+      return !!t && (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
+    };
+    const down = (e: KeyboardEvent) => {
+      if (!isSpace(e) || e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
+      // Also stops a focused button from treating the space as a click.
+      e.preventDefault();
+      if (!e.repeat) playPause.current();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (isSpace(e) && !typing(e.target)) e.preventDefault();
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
+
   // Leaving the page takes the click, and everything it scheduled, with it.
   useEffect(() => () => {
     met.current?.stop();
@@ -259,7 +319,10 @@ export default function Page() {
   // ---- the neck ----
   // Playing, the neck follows the bar; otherwise it shows the chord last tapped.
   const playing = beat && beat.bar >= 0 && bars[beat.bar]?.length ? { bar: beat.bar, half: beat.half } : null;
-  const shownRef = running ? (playing ? bars[playing.bar][playing.half] ?? bars[playing.bar][0] : null) : held;
+  // Still, it's the chord last tapped — or, with a progression and nothing
+  // tapped, its first chord, which is where playing will start.
+  const firstRef = bars.find((b) => b.length)?.[0] ?? null;
+  const shownRef = running ? (playing ? bars[playing.bar][playing.half] ?? bars[playing.bar][0] : null) : held ?? firstRef;
   const chord = name && scale && shownRef ? chordOf(shownRef) : null;
   const mood: Mood | null = running && chord ? chord.mood : null;
 
@@ -271,7 +334,12 @@ export default function Page() {
     const iv = note ? (pitchAt(string, fret) - noteIndex(note) + 12) % 12 : -1;
     return iv === 0 ? INK : MOOD_FILL[noteMood(iv, homeTones)];
   };
-  const dots: FbNote[] = note && name ? neckDots(note, name, shown, homeTones, chord) : [];
+  /** The note under the pointer (or last tapped), for its theory tip. */
+  const [hover, setHover] = useState<{ string: number; fret: number } | null>(null);
+  const hoverPc = hover ? pitchAt(hover.string, hover.fret) : null;
+  const tip = hover && note && name
+    ? fretTip(hover.string, hover.fret, { keyPc: noteIndex(note), keyName: name, shown, homeTones, chord, maxFret: MAX_FRET })
+    : null;
 
   /** Phrase dots take the neck's colours: black tonic, mood for the rest. */
   const phraseFill = gripFill;
@@ -288,31 +356,43 @@ export default function Page() {
     if (!running && p) player.preview(p, bpm);
   };
 
-  // What the study modules see of the page, and the little they may change.
-  const studyCtx: StudyCtx | null = note && name && scale && chords
+  // The hand position: five frets, starting a fret below the key's root on
+  // the low E string unless moved.
+  const lo = note ? Math.max(0, Math.min(11, homeFret(noteIndex(note)) - 1 + shift)) : 0;
+
+  // What the practice steps see of the page.
+  const practiceCtx: PracticeCtx | null = note && name && scale && chords
     ? {
-      note, name, keyPc: noteIndex(note), scale, shown, mode, kind, chordOf, chords,
-      focus: chord, preview,
-      setKey: (t) => setText(t),
-      setShown,
+      note, name, keyPc: noteIndex(note), scale, shown, mode, kind, chordOf, focus: chord,
+      progression: bars.filter((b) => b.length).map((b) => b.map(chordOf)),
+      lo, fillFor: gripFill, preview,
     }
     : null;
-  const studyMod = MODULES.find((x) => x.id === tab) ?? MODULES[0];
-  const phrase = studyCtx && studyMod.phrase ? studyMod.phrase(studyCtx, sels[tab] ?? studyMod.initial) : null;
-  // The phrase as it sits on the neck: moved to the chord in focus when it follows the chords.
-  const phraseNotes = phrase ? phrase.notesFor(follow ? chord : null) : [];
+  const practiceStep = STEPS.find((x) => x.id === step) ?? STEPS[0];
+  const phrase = practiceCtx ? practiceStep.phrase(practiceCtx, sels[step] ?? practiceStep.initial) : null;
+  // The bar of the progression on show: the one playing, else the first.
+  const showIdx = running && playing ? bars.slice(0, playing.bar).filter((b) => b.length).length : 0;
+  const phraseNotes = phrase ? phrase.notesFor(chord, showIdx) : [];
+  const targets = phrase?.targetAfter?.(showIdx) ?? [];
   const phraseBars = barsOf(phraseNotes);
   const hitsByPart = Array.from({ length: phraseBars }, (_, k) =>
     phraseNotes.filter((x) => x.at >= k * 8 && x.at < k * 8 + 8).map((x) => x.at - k * 8));
+  const dots: FbNote[] = note && name ? neckDots(note, name, shown, homeTones, chord, hoverPc, !!phrase?.roles) : [];
 
   useEffect(() => {
-    phraseCfg.current = { phrase, pass, follow };
-  }, [phrase, pass, follow]);
+    phraseCfg.current = { phrase, yourTurn };
+  }, [phrase, yourTurn]);
 
-  const overlay = phrase
+  const overlay = practiceCtx
     ? (geo: FretGeo) => (
-      <RiffLayer geo={geo} notes={phraseNotes} lands={phrase.lands} events={player.events}
-        live={running || player.previewing} colorOf={phraseFill} outside={outsideLabel} />
+      <>
+        <PositionShade geo={geo} lo={lo} />
+        {phrase && (
+          <RiffLayer geo={geo} notes={phraseNotes} lands={phrase.lands} events={player.events}
+            live={running || player.previewing} colorOf={phraseFill} outside={outsideLabel}
+            numbered={phrase.numbered !== false} targets={targets} />
+        )}
+      </>
     )
     : undefined;
 
@@ -386,7 +466,24 @@ export default function Page() {
               </button>
             );
           })}
+          {/* Reference, not practice: where this key sits among the others. */}
+          {note && name && scale && (
+            <button onClick={() => setCircleOpen(!circleOpen)} aria-expanded={circleOpen}
+              className={`self-start rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                circleOpen ? "border-neutral-800 bg-neutral-800 text-neutral-50" : "border-neutral-300 text-neutral-500 hover:text-neutral-800"
+              }`}>
+              circle of fifths
+            </button>
+          )}
         </div>
+        {circleOpen && note && name && scale && (
+          <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+            <KeyCircle ctx={{
+              keyPc: noteIndex(note), name, scale, mode, chordOf,
+              setKey: (t) => setText(t), setShown,
+            }} />
+          </div>
+        )}
 
         {note && name && (
           <>
@@ -437,34 +534,22 @@ export default function Page() {
                         </div>
                       );
                     }
-                    const { full, three } = grips[i] ?? { full: null, three: null };
                     const ref: ChordRef = { degree: c.degree, kind: c.kind };
                     return (
-                      <div key={i} className="group relative">
+                      <ChordHover key={i} chord={c} keyNote={note} fillFor={gripFill}
+                        align={i === 0 ? "left" : i === 6 ? "right" : "center"}>
                         <button {...bind(ref)}
                           onClick={() => { if (!wasDrag()) tapChord(ref); }}
                           aria-label={`${c.numeral} ${c.name}`}
                           style={{ background: MOOD_FILL[c.mood], touchAction: "none" }}
                           className={`flex w-full cursor-grab touch-none select-none flex-col items-center rounded-xl py-2 leading-tight text-neutral-950 transition-shadow active:cursor-grabbing ${
-                            chord && chord.degree === c.degree && chord.kind === c.kind
+                            chord && chord.degree === c.degree && chord.kind === c.kind && !chord.alt
                               ? "ring-2 ring-neutral-900 ring-offset-2 ring-offset-neutral-50" : ""
                           }`}>
                           <span className="text-sm font-bold sm:text-lg">{c.numeral}</span>
                           <span className="text-xs text-neutral-800">{c.name}</span>
                         </button>
-                        {/* Fingerings on hover: the shape everyone learns, and
-                            the chord in three strings. Hover only, so touch
-                            screens never get it stuck open; hidden mid-drag. */}
-                        {!drag && (
-                          <div role="tooltip"
-                            className={`pointer-events-none absolute bottom-full z-20 mb-3 hidden gap-1 rounded-2xl border border-neutral-200 bg-white p-2 shadow-lg group-hover:flex ${
-                              i === 0 ? "left-0" : i === 6 ? "right-0" : "left-1/2 -translate-x-1/2"
-                            }`}>
-                            {full && <GripDiagram grip={full} label={c.name} fillFor={gripFill} />}
-                            {three && <GripDiagram grip={three} label="3 strings" fillFor={gripFill} />}
-                          </div>
-                        )}
-                      </div>
+                      </ChordHover>
                     );
                   })}
                 </div>
@@ -519,41 +604,70 @@ export default function Page() {
                   playing={playing}
                   over={drag?.over ?? null}
                   canAdd={bars.length < MAX_BARS}
+                  keyNote={note}
+                  fillFor={gripFill}
+                  variantsFor={(bar, half) => variantsOf(name, scale, bars[bar][half]?.degree ?? 0)}
+                  onAlter={alterChord}
                   onTapBar={tapBar}
                   onAddBar={addBar}
                   onClear={clearStrip}
                 />
 
+                {/* Save the progression to come back to; saved ones load
+                    with their key, mode and tempo. */}
+                <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+                  <button onClick={save} disabled={!canSave}
+                    className="rounded-full bg-neutral-800 px-3 py-1 text-neutral-50 hover:bg-neutral-700 disabled:opacity-30">
+                    Save progression
+                  </button>
+                  {saved.map((sp) => <SavedPill key={sp.id} sp={sp} onLoad={() => {
+                    setText(sp.key);
+                    setShown(sp.shown);
+                    setBars(sp.bars);
+                    setTarget(null);
+                    setBpmText(String(sp.bpm));
+                  }} />)}
+                </div>
+                <p className="-mt-2 text-center text-xs text-neutral-400">
+                  Hover a chord for fingerings · hold a bar to change its chord · space plays and pauses
+                </p>
+
               </div>
             )}
 
-            {studyCtx && (
-              <StudyPanel
-                ctx={studyCtx}
-                tab={tab}
-                setTab={setTab}
+            {practiceCtx && (
+              <Practice
+                ctx={practiceCtx}
+                onMove={(by) => {
+                  // Kept so the window never runs off either end of the neck.
+                  const home = homeFret(noteIndex(note)) - 1;
+                  setShift((x) => Math.max(-home, Math.min(11 - home, x + by)));
+                }}
+                canMove={{ down: lo > 0, up: lo < 11 }}
+                step={step}
+                setStep={setStep}
                 sels={sels}
                 setSel={(id, sel) => setSels({ ...sels, [id]: sel })}
-                phrase={phrase}
-                pass={pass}
-                setPass={setPass}
-                follow={follow}
-                setFollow={setFollow}
-                canClimb={running && pass === "loop"}
+                yourTurn={yourTurn}
+                setYourTurn={setYourTurn}
+                canClimb={running}
                 onClimb={() => setBpmText(String(clampBpm(bpm + 5)))}
               />
             )}
 
-            {/* A phone gets              </div>
-            )}
-
-            {/* A phone gets the neck stood up so the dots stay finger-sized;
+            {/* The neck breaks out of the page's column for room to breathe.
+                A phone gets it stood up so the dots stay finger-sized;
                 anything wider gets it lying down, scaled to fit. */}
-            <div className="sm:hidden">
-              <Fretboard notes={dots} maxFret={MAX_FRET} vertical overlay={overlay} />
-            </div>
-            <div className="hidden sm:block">
-              <Fretboard notes={dots} maxFret={MAX_FRET} fit overlay={overlay} />
+            <div className="relative left-1/2 w-[min(calc(100vw-2rem),76rem)] -translate-x-1/2 space-y-3">
+              <div className="sm:hidden">
+                <Fretboard notes={dots} maxFret={MAX_FRET} vertical overlay={overlay}
+                  onNoteHover={(n) => n && setHover(n)} onNoteClick={(n) => setHover(n)} />
+              </div>
+              <div className="hidden sm:block">
+                <Fretboard notes={dots} maxFret={MAX_FRET} fit overlay={overlay}
+                  onNoteHover={(n) => setHover(n)} onNoteClick={(n) => setHover(n)} />
+              </div>
+              <NoteTip tip={tip} />
             </div>
           </>
         )}
@@ -591,6 +705,7 @@ function nextEmpty(bars: Bar[], from: number): number | null {
  */
 function neckDots(
   key: NoteName, keyName: string, shown: number[], homeTones: number[], chord: DiatonicChord | null,
+  hoverPc: number | null, roles: boolean,
 ): FbNote[] {
   const on = shown.map((s) => spelled(s, shown));
   const semis = [0, ...on.map((iv) => iv.semis)];
@@ -598,13 +713,18 @@ function neckDots(
   return fretNotesFor(key, semis, labels, MAX_FRET).map((n) => {
     const iv = (n.pc - noteIndex(key) + 12) % 12;
     const mood = noteMood(iv, homeTones);
-    const base = { string: n.string, fret: n.fret, label: n.degree };
+    // Every copy of the note being looked at is ringed: that's the map.
+    const base = { string: n.string, fret: n.fret, label: n.degree, halo: n.pc === hoverPc };
+    // Practising over chords, a chord's notes are named by their job in it.
+    const role = roles && chord && chord.tones.includes(iv) ? roleLabel(iv - chord.semis) : null;
     if (iv === 0) {
-      return { ...base, fill: INK, ring: chord?.tones.includes(0) ? MOOD_FILL.home : undefined };
+      return { ...base, label: role ?? base.label, fill: INK, ring: chord?.tones.includes(0) ? MOOD_FILL.home : undefined };
     }
     if (!chord) return { ...base, fill: MOOD_FILL[mood] };
-    if (!chord.tones.includes(iv)) return { ...base, fill: MOOD_TINT[mood] };
-    return { ...base, fill: MOOD_FILL[mood], shape: "diamond" as const, ring: iv === chord.semis ? INK : undefined };
+    // Named by role, a chord's notes would be muddled by degree numbers on
+    // the rest of the key: those stay pale and quiet.
+    if (!chord.tones.includes(iv)) return { ...base, label: roles ? "" : base.label, fill: MOOD_TINT[mood] };
+    return { ...base, label: role ?? base.label, fill: MOOD_FILL[mood], shape: "diamond" as const, ring: iv === chord.semis ? INK : undefined };
   });
 }
 
@@ -617,5 +737,70 @@ function MetronomeIcon() {
       <circle cx={15.2} cy={10.6} r={1.3} fill="currentColor" />
       <path d="M7 17h10" />
     </svg>
+  );
+}
+
+/** One saved progression: tap to load it, ✕ to forget it. */
+function SavedPill({ sp, onLoad }: { sp: SavedProgression; onLoad: () => void }) {
+  return (
+    <span className="flex items-center rounded-full border border-neutral-200 bg-white">
+      <button onClick={onLoad} className="max-w-64 truncate py-1 pr-1 pl-3 text-neutral-700 hover:text-neutral-950" title={sp.name}>
+        {sp.name}
+      </button>
+      <button onClick={() => deleteProgression(sp.id)} aria-label={`forget ${sp.name}`}
+        className="h-7 w-7 rounded-full text-neutral-400 hover:text-neutral-700">✕</button>
+    </span>
+  );
+}
+
+/**
+ * The story of the note under the pointer: what it is in the key, how it
+ * feels, its job in the chord, and where else it lives on the neck. Space is
+ * kept for it so the page doesn't jump as the pointer moves.
+ */
+function NoteTip({ tip }: { tip: ReturnType<typeof fretTip> | null }) {
+  return (
+    // On a phone the neck is tall: a tip pins to the bottom of the screen so
+    // the note tapped and its story are in view together.
+    <div className={`min-h-28 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm ${
+      tip ? "max-sm:sticky max-sm:bottom-3 max-sm:z-20 max-sm:shadow-lg" : ""}`}>
+      {tip ? (
+        <>
+          <p className="flex items-center gap-2 font-bold text-neutral-900">
+            <span aria-hidden className="h-2.5 w-2.5 rounded-full"
+              style={{ background: tip.mood === "outside" ? "#a8a29e" : MOOD_FILL[tip.mood] }} />
+            {tip.title}
+          </p>
+          <ul className="mt-1 space-y-0.5 text-neutral-600">
+            {tip.lines.map((l, i) => <li key={i}>{l}</li>)}
+          </ul>
+        </>
+      ) : (
+        <p className="text-neutral-400">Hover over (or tap) any note on the neck to learn what it is and where else it lives.</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The hand position on the neck: everything outside its five frets is
+ * washed out, so the eye stays where the hand is.
+ */
+function PositionShade({ geo, lo }: { geo: FretGeo; lo: number }) {
+  const start = lo <= 0 ? geo.fretLine(0) - geo.fretL * 0.7 : geo.fretLine(lo - 1);
+  const end = geo.fretLine(Math.min(lo + 4, geo.maxFret));
+  const v0 = Math.min(geo.across(-0.7), geo.across(5.7));
+  const v1 = Math.max(geo.across(-0.7), geo.across(5.7));
+  const rect = (u0: number, u1: number) => {
+    const a = geo.at(u0, v0), b = geo.at(u1, v1);
+    return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
+  };
+  const neckStart = geo.fretLine(0) - geo.fretL;
+  const neckEnd = geo.fretLine(geo.maxFret) + geo.fretL;
+  return (
+    <g pointerEvents="none">
+      {start > neckStart && <rect {...rect(neckStart, start)} fill="#fff" opacity={0.6} />}
+      {end < neckEnd && <rect {...rect(end, neckEnd)} fill="#fff" opacity={0.6} />}
+    </g>
   );
 }
