@@ -32,6 +32,8 @@ interface Props {
   vertical?: boolean;
   /** Drawn over the notes, with the neck's geometry, for anything that moves. */
   overlay?: (geo: FretGeo) => React.ReactNode;
+  /** Drawn under the notes: the board itself, for anything the hand grabs. */
+  underlay?: (geo: FretGeo) => React.ReactNode;
 }
 
 /**
@@ -51,6 +53,8 @@ export interface FretGeo {
   fretMid: (f: number) => number;
   /** x/y of the dot for string `s`, fret `f` (fractional frets slide). */
   pos: (s: number, f: number) => { x: number; y: number };
+  /** The fret under a pointer event on the neck, fractional: 7 is fret 7's middle. */
+  fretAt: (e: { clientX: number; clientY: number; currentTarget: Element }) => number;
 }
 
 const INLAYS = [3, 5, 7, 9, 12, 15, 17, 19, 21];
@@ -72,7 +76,7 @@ const diamond = ({ x, y }: { x: number; y: number }, d: number) =>
   `M${x} ${y - d}L${x + d} ${y}L${x} ${y + d}L${x - d} ${y}Z`;
 
 export default function Fretboard({
-  notes, maxFret = 22, onNoteClick, onNoteHover, playOnClick = true, fit = false, vertical = false, overlay,
+  notes, maxFret = 22, onNoteClick, onNoteHover, playOnClick = true, fit = false, vertical = false, overlay, underlay,
 }: Props) {
   // Everything is laid out in neck terms, `u` along the neck and `v` across
   // the strings, then turned into x/y at the end — so one drawing serves both
@@ -115,6 +119,16 @@ export default function Fretboard({
   };
 
   const scaled = fit || vertical;
+  const geo: FretGeo = {
+    vertical, R, fretL, stringGap, maxFret, at, across, fretLine, fretMid,
+    pos: (s, f) => at(fretMid(f), across(s)),
+    fretAt: (e) => {
+      const m = (e.currentTarget.closest("svg") as SVGSVGElement | null)?.getScreenCTM();
+      if (!m) return 0;
+      const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+      return ((vertical ? p.y : p.x) - nut) / fretL + 0.5;
+    },
+  };
 
   return (
     <div className={`${scaled ? "" : "overflow-x-auto"} rounded-2xl border border-neutral-200 bg-white`}>
@@ -158,6 +172,7 @@ export default function Fretboard({
             stroke="#a8a29e" strokeWidth={0.7 + (5 - s) * 0.3}
           />
         ))}
+        {underlay?.(geo)}
         {/* notes */}
         {notes.filter((n) => n.fret <= maxFret).map((n, i) => {
           const p = noteAtPos(n.string, n.fret);
@@ -187,10 +202,7 @@ export default function Fretboard({
             </g>
           );
         })}
-        {overlay?.({
-          vertical, R, fretL, stringGap, maxFret, at, across, fretLine, fretMid,
-          pos: (s, f) => at(fretMid(f), across(s)),
-        })}
+        {overlay?.(geo)}
       </svg>
     </div>
   );

@@ -6,6 +6,7 @@ import Fretboard, { FbNote, FretGeo } from "@/components/Fretboard";
 import ChordHover from "@/components/ChordHover";
 import ProgressionStrip from "@/components/ProgressionStrip";
 import RiffLayer from "@/components/RiffLayer";
+import { HandBoard, HandFrame } from "@/components/HandWindow";
 import { Metronome, Voice, audioCtx, click, pluck, sticks } from "@/lib/audio";
 import { MODES } from "@/lib/modes";
 import { NoteName, fretNotesFor, noteIndex, parseNote, pitchAt, spellInterval, spellNote } from "@/lib/theory";
@@ -409,7 +410,7 @@ export default function Page() {
   const overlay = practiceCtx
     ? (geo: FretGeo) => (
       <>
-        <PositionShade geo={geo} lo={lo} />
+        <HandFrame geo={geo} lo={lo} />
         {phrase && (
           <RiffLayer geo={geo} notes={phraseNotes} lands={phrase.lands} events={player.events}
             live={running || player.previewing} colorOf={phraseFill} outside={outsideLabel}
@@ -417,6 +418,11 @@ export default function Page() {
         )}
       </>
     )
+    : undefined;
+  // The hand window, grabbed on the board under the notes.
+  const home = note ? homeFret(noteIndex(note)) - 1 : 0;
+  const underlay = practiceCtx
+    ? (geo: FretGeo) => <HandBoard geo={geo} lo={lo} maxLo={11} onLo={(n) => setShift(n - home)} />
     : undefined;
 
   return (
@@ -499,11 +505,11 @@ export default function Page() {
           <div className="relative left-1/2 w-[min(calc(100vw-2rem),76rem)] -translate-x-1/2"
             onPointerMove={(e) => setPointer({ x: e.clientX, y: e.clientY, touch: e.pointerType === "touch" })}>
             <div className="sm:hidden">
-              <Fretboard notes={dots} maxFret={MAX_FRET} vertical overlay={overlay}
+              <Fretboard notes={dots} maxFret={MAX_FRET} vertical overlay={overlay} underlay={underlay}
                 onNoteHover={(n) => n && setHover(n)} onNoteClick={(n) => setHover(n)} />
             </div>
             <div className="hidden sm:block">
-              <Fretboard notes={dots} maxFret={MAX_FRET} fit overlay={overlay}
+              <Fretboard notes={dots} maxFret={MAX_FRET} fit overlay={overlay} underlay={underlay}
                 onNoteHover={(n) => setHover(n)} onNoteClick={(n) => setHover(n)} />
             </div>
           </div>
@@ -796,28 +802,5 @@ function NoteTip({ tip, at, onClose }: {
         {tip.lines.map((l, i) => <li key={i}>{l}</li>)}
       </ul>
     </div>
-  );
-}
-
-/**
- * The hand position on the neck: everything outside its five frets is
- * washed out, so the eye stays where the hand is.
- */
-function PositionShade({ geo, lo }: { geo: FretGeo; lo: number }) {
-  const start = lo <= 0 ? geo.fretLine(0) - geo.fretL * 0.7 : geo.fretLine(lo - 1);
-  const end = geo.fretLine(Math.min(lo + 4, geo.maxFret));
-  const v0 = Math.min(geo.across(-0.7), geo.across(5.7));
-  const v1 = Math.max(geo.across(-0.7), geo.across(5.7));
-  const rect = (u0: number, u1: number) => {
-    const a = geo.at(u0, v0), b = geo.at(u1, v1);
-    return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
-  };
-  const neckStart = geo.fretLine(0) - geo.fretL;
-  const neckEnd = geo.fretLine(geo.maxFret) + geo.fretL;
-  return (
-    <g pointerEvents="none">
-      {start > neckStart && <rect {...rect(neckStart, start)} fill="#fff" opacity={0.6} />}
-      {end < neckEnd && <rect {...rect(end, neckEnd)} fill="#fff" opacity={0.6} />}
-    </g>
   );
 }

@@ -38,12 +38,12 @@ export default function Practice({
   return (
     <section className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-3 sm:p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Where the hand is. Moving it a couple of frets at a time walks the
-            neck box by box — the same chords, found again higher up. */}
+        {/* Where the hand is. The frame on the neck drags; these step it two
+            frets at a time, walking the neck box by box. */}
         <div className="flex items-center gap-1 text-sm text-neutral-600">
           <button onClick={() => onMove(-2)} disabled={!canMove.down} aria-label="move position down the neck"
             className="h-8 w-8 rounded-full text-lg hover:bg-neutral-100 disabled:opacity-30">‹</button>
-          <span className="tabular-nums">
+          <span className="tabular-nums" title="Drag the frame on the neck, or click where you want the hand">
             Position <b className="text-neutral-900">frets {ctx.lo}–{ctx.lo + 4}</b>
           </span>
           <button onClick={() => onMove(2)} disabled={!canMove.up} aria-label="move position up the neck"
