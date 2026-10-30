@@ -21,7 +21,6 @@ import {
 import { DropSpot, useChordDrag } from "@/lib/useChordDrag";
 import { RiffNote, barsOf } from "@/lib/riffs";
 import { barOf, usePhrasePlayer } from "@/lib/usePhrasePlayer";
-import KeyCircle from "@/components/KeyCircle";
 import Practice from "@/components/practice/Practice";
 import { STEPS } from "@/components/practice/steps";
 import { Phrase, PracticeCtx } from "@/components/practice/types";
@@ -74,7 +73,6 @@ export default function Page() {
   const [yourTurn, setYourTurn] = useState(false);
   /** The hand position, in frets from the key's home position. */
   const [shift, setShift] = useState(0);
-  const [circleOpen, setCircleOpen] = useState(false);
 
   // ---- progression ----
   // Bars hold degrees and kinds, not chords, so a progression follows the key
@@ -336,6 +334,8 @@ export default function Page() {
   };
   /** The note under the pointer (or last tapped), for its theory tip. */
   const [hover, setHover] = useState<{ string: number; fret: number } | null>(null);
+  /** Where the pointer is over the neck, for the note's card to follow. */
+  const [pointer, setPointer] = useState<{ x: number; y: number; touch: boolean } | null>(null);
   const hoverPc = hover ? pitchAt(hover.string, hover.fret) : null;
   const tip = hover && note && name
     ? fretTip(hover.string, hover.fret, { keyPc: noteIndex(note), keyName: name, shown, homeTones, chord, maxFret: MAX_FRET })
@@ -390,7 +390,7 @@ export default function Page() {
         {phrase && (
           <RiffLayer geo={geo} notes={phraseNotes} lands={phrase.lands} events={player.events}
             live={running || player.previewing} colorOf={phraseFill} outside={outsideLabel}
-            numbered={phrase.numbered !== false} targets={targets} />
+            numbered={phrase.numbered !== false} targets={targets} compass={phrase.compassFor?.(showIdx)} />
         )}
       </>
     )
@@ -466,15 +466,6 @@ export default function Page() {
               </button>
             );
           })}
-          {/* Reference, not practice: where this key sits among the others. */}
-          {note && name && scale && (
-            <button onClick={() => setCircleOpen(!circleOpen)} aria-expanded={circleOpen}
-              className={`self-start rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
-                circleOpen ? "border-neutral-800 bg-neutral-800 text-neutral-50" : "border-neutral-300 text-neutral-500 hover:text-neutral-800"
-              }`}>
-              circle of fifths
-            </button>
-          )}
         </div>
 
         {/* The neck sits straight under the modes, so picking one shows it
@@ -482,7 +473,8 @@ export default function Page() {
             a phone gets it stood up so the dots stay finger-sized; anything
             wider gets it lying down, scaled to fit. */}
         {note && name && (
-          <div className="relative left-1/2 w-[min(calc(100vw-2rem),76rem)] -translate-x-1/2 space-y-3">
+          <div className="relative left-1/2 w-[min(calc(100vw-2rem),76rem)] -translate-x-1/2"
+            onPointerMove={(e) => setPointer({ x: e.clientX, y: e.clientY, touch: e.pointerType === "touch" })}>
             <div className="sm:hidden">
               <Fretboard notes={dots} maxFret={MAX_FRET} vertical overlay={overlay}
                 onNoteHover={(n) => n && setHover(n)} onNoteClick={(n) => setHover(n)} />
@@ -491,7 +483,7 @@ export default function Page() {
               <Fretboard notes={dots} maxFret={MAX_FRET} fit overlay={overlay}
                 onNoteHover={(n) => setHover(n)} onNoteClick={(n) => setHover(n)} />
             </div>
-            <NoteTip tip={tip} />
+            <NoteTip tip={tip} at={pointer} onClose={() => setHover(null)} />
           </div>
         )}
 
@@ -514,15 +506,6 @@ export default function Page() {
             canClimb={running}
             onClimb={() => setBpmText(String(clampBpm(bpm + 5)))}
           />
-        )}
-
-        {circleOpen && note && name && scale && (
-          <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-            <KeyCircle ctx={{
-              keyPc: noteIndex(note), name, scale, mode, chordOf,
-              setKey: (t) => setText(t), setShown,
-            }} />
-          </div>
         )}
 
         {note && name && (
@@ -760,29 +743,34 @@ function SavedPill({ sp, onLoad }: { sp: SavedProgression; onLoad: () => void })
 
 /**
  * The story of the note under the pointer: what it is in the key, how it
- * feels, its job in the chord, and where else it lives on the neck. Space is
- * kept for it so the page doesn't jump as the pointer moves.
+ * feels, its job in the chord, and where else it lives on the neck. A card
+ * beside the pointer while it hovers; on a phone, where a tap picks the
+ * note, it pins to the bottom of the screen until tapped away.
  */
-function NoteTip({ tip }: { tip: ReturnType<typeof fretTip> | null }) {
+function NoteTip({ tip, at, onClose }: {
+  tip: ReturnType<typeof fretTip> | null;
+  at: { x: number; y: number; touch: boolean } | null;
+  onClose: () => void;
+}) {
+  if (!tip || !at) return null;
+  const W = 320;
+  // Beside the pointer, flipped to the other side near the window's edges.
+  const left = at.x + 18 + W > window.innerWidth ? Math.max(8, at.x - 18 - W) : at.x + 18;
+  const below = at.y < window.innerHeight * 0.6;
+  const style: React.CSSProperties = at.touch
+    ? { left: 12, right: 12, bottom: 12 }
+    : below ? { left, top: at.y + 18, width: W } : { left, bottom: window.innerHeight - at.y + 18, width: W };
   return (
-    // On a phone the neck is tall: a tip pins to the bottom of the screen so
-    // the note tapped and its story are in view together.
-    <div className={`min-h-28 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm ${
-      tip ? "max-sm:sticky max-sm:bottom-3 max-sm:z-20 max-sm:shadow-lg" : ""}`}>
-      {tip ? (
-        <>
-          <p className="flex items-center gap-2 font-bold text-neutral-900">
-            <span aria-hidden className="h-2.5 w-2.5 rounded-full"
-              style={{ background: tip.mood === "outside" ? "#a8a29e" : MOOD_FILL[tip.mood] }} />
-            {tip.title}
-          </p>
-          <ul className="mt-1 space-y-0.5 text-neutral-600">
-            {tip.lines.map((l, i) => <li key={i}>{l}</li>)}
-          </ul>
-        </>
-      ) : (
-        <p className="text-neutral-400">Hover over (or tap) any note on the neck to learn what it is and where else it lives.</p>
-      )}
+    <div role="tooltip" style={style} onClick={at.touch ? onClose : undefined}
+      className={`fixed z-30 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm shadow-lg ${at.touch ? "" : "pointer-events-none"}`}>
+      <p className="flex items-center gap-2 font-bold text-neutral-900">
+        <span aria-hidden className="h-2.5 w-2.5 rounded-full"
+          style={{ background: tip.mood === "outside" ? "#a8a29e" : MOOD_FILL[tip.mood] }} />
+        {tip.title}
+      </p>
+      <ul className="mt-1 space-y-0.5 text-neutral-600">
+        {tip.lines.map((l, i) => <li key={i}>{l}</li>)}
+      </ul>
     </div>
   );
 }

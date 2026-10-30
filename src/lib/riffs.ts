@@ -24,6 +24,8 @@ export interface RiffNote {
   /** Slide: the fret it slides to. Bend and release: the fret whose pitch the
    *  bend reaches (so a whole-step bend from 7 has `to` 9). */
   to?: number;
+  /** Shown on the note itself, in place of the neck's own label: an interval, say. */
+  label?: string;
 }
 
 export interface Riff {

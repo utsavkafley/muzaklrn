@@ -163,40 +163,45 @@ export function toneLines(bars: Segment[][], lo: number, rhythm: Rhythm): RiffNo
 /** Every string set at once: shapes are picked from all four. */
 export const ANY_STRINGS = -1;
 
+/** A three-string shape on the neck: its lowest string, and a fret on it and the two above. */
+export interface Placed { s: number; frets: number[] }
+
 /**
- * A triad shape for every chord, inside the hand position wherever one
- * fits, on one set of three strings or any. The first sits mid-hand, each
- * after it is the shape whose notes move least from the one before — the
- * inversion a good rhythm player reaches for. Struck on beats 1 and 3, or
- * once for each chord of a split bar.
+ * A triad shape for every segment (its first three pitch classes), inside
+ * the hand position wherever one fits, on one set of three strings or any.
+ * The first sits mid-hand, each after it is the shape whose notes move least
+ * from the one before — the inversion a good rhythm player reaches for.
  */
-export function shapeLines(bars: Segment[][], low: number, lo: number): RiffNote[][] {
+export function placeShapes(bars: Segment[][], low: number, lo: number): (Placed | null)[][] {
   const sets = low === ANY_STRINGS ? [0, 1, 2, 3] : [low];
   const inHand = (fr: number[]) => fr.every((f) => (f >= lo && f <= lo + 4) || (f === 0 && lo <= 1));
-  const pitch = (s: number, fr: number[]) => fr.reduce((a, f, i) => a + midiAt(s + i, f), 0) / 3;
+  const pitch = (x: Placed) => x.frets.reduce((a, f, i) => a + midiAt(x.s + i, f), 0) / 3;
   const run = (from: number | null) => {
     let last = from;
-    const out = bars.map((segs) => {
-      const notes: RiffNote[] = [];
-      const per = segs.length === 2 ? 1 : 2;
-      segs.forEach((seg, k) => {
-        const all = sets.flatMap((s) => triadShapes(seg.pcs.slice(0, 3), s).map((sh) => ({ s, frets: sh.frets })));
-        const fits = all.filter((x) => inHand(x.frets));
-        const pool = fits.length ? fits : all;
-        if (!pool.length) return;
-        // Measured in pitch, so shapes on different strings compare fairly.
-        const aim = last ?? midiAt(Math.min(...sets) + 1, lo + 2) + (low === ANY_STRINGS ? 7 : 0);
-        const sh = pool.reduce((b, x) => (Math.abs(pitch(x.s, x.frets) - aim) < Math.abs(pitch(b.s, b.frets) - aim) ? x : b));
-        last = pitch(sh.s, sh.frets);
-        for (let r = 0; r < per; r++) {
-          sh.frets.forEach((f, si) => notes.push({ at: k * 4 + r * 4, len: 4, string: sh.s + si, fret: f }));
-        }
-      });
-      return notes;
-    });
+    const out = bars.map((segs) => segs.map((seg) => {
+      const all = sets.flatMap((s) => triadShapes(seg.pcs.slice(0, 3), s).map((sh) => ({ s, frets: sh.frets })));
+      const fits = all.filter((x) => inHand(x.frets));
+      const pool = fits.length ? fits : all;
+      if (!pool.length) return null;
+      // Measured in pitch, so shapes on different strings compare fairly.
+      const aim = last ?? midiAt(Math.min(...sets) + 1, lo + 2) + (low === ANY_STRINGS ? 7 : 0);
+      const sh = pool.reduce((b, x) => (Math.abs(pitch(x) - aim) < Math.abs(pitch(b) - aim) ? x : b));
+      last = pitch(sh);
+      return sh;
+    }));
     return { out, last };
   };
   return run(run(null).last).out;
+}
+
+/** Each chord's triad shape, struck on beats 1 and 3, or once for each chord of a split bar. */
+export function shapeLines(bars: Segment[][], low: number, lo: number): RiffNote[][] {
+  return placeShapes(bars, low, lo).map((shapes, b) => {
+    const per = bars[b].length === 2 ? 1 : 2;
+    return shapes.flatMap((sh, k) => (sh
+      ? Array.from({ length: per }, (_, r) => sh.frets.map((f, si) => ({ at: k * 4 + r * 4, len: 4, string: sh.s + si, fret: f }))).flat()
+      : []));
+  });
 }
 
 /** A chord tone's role, by its interval above the chord's root: R, ♭3, 3, 5, ♭7… */

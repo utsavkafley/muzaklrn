@@ -3,6 +3,7 @@
 // and the phrase it puts on the neck. The shared player sounds and animates
 // it, bar by bar, and trades bars with you on "your turn".
 
+import { Ghost, Reach } from "@/lib/compass";
 import { ChordKind, ChordRef, DiatonicChord } from "@/lib/harmony";
 import { Mode } from "@/lib/modes";
 import { RiffNote } from "@/lib/riffs";
@@ -25,6 +26,8 @@ export interface Phrase {
   notesFor: (chord: DiatonicChord | null, idx: number) => RiffNote[];
   /** Where the bar after `idx` begins: the landing to aim for. */
   targetAfter?: (idx: number) => RiffNote[];
+  /** The triad compass for bar `idx`: triad notes the chord moved off, and the reaches from them. */
+  compassFor?: (idx: number) => { ghosts: Ghost[]; reaches: Reach[] };
 }
 
 export interface PracticeCtx {

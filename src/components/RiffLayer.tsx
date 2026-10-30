@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FretGeo } from "./Fretboard";
 import { audioCtx } from "@/lib/audio";
 import { RiffEvent, RiffNote, moveWindow, steps } from "@/lib/riffs";
+import { Ghost, Reach } from "@/lib/compass";
 
 const INK = "#18181b";
 const BOARD = "#ffffff";
@@ -26,6 +27,8 @@ interface Props {
   numbered?: boolean;
   /** Where the next bar begins: ringed twice and tagged "next". */
   targets?: RiffNote[];
+  /** The triad compass: triad notes moved off (ghosts), and each reach from a triad note to an interval. */
+  compass?: { ghosts: Ghost[]; reaches: Reach[] };
 }
 
 /**
@@ -36,7 +39,7 @@ interface Props {
  * travelling up the string on a slide, and on a bend the string itself
  * bowing as the dot rises and its colour turns into the note it reaches.
  */
-export default function RiffLayer({ geo, notes, lands, events, live, colorOf, outside, numbered = true, targets = [] }: Props) {
+export default function RiffLayer({ geo, notes, lands, events, live, colorOf, outside, numbered = true, targets = [], compass }: Props) {
   const [frame, setFrame] = useState<{ now: number; on: RiffEvent[] }>({ now: 0, on: [] });
 
   useEffect(() => {
@@ -56,6 +59,7 @@ export default function RiffLayer({ geo, notes, lands, events, live, colorOf, ou
     <g pointerEvents="none">
       {/* Bent strings first, so the map and the moving dots sit on top. */}
       {on.map((e) => <Live key={`s${e.start}-${e.string}`} part="string" geo={geo} e={e} now={frame.now} colorOf={colorOf} />)}
+      {compass && <Compass geo={geo} {...compass} />}
       <Ghosts geo={geo} notes={notes} lands={lands} faded={on.length > 0} colorOf={colorOf} outside={outside} numbered={numbered} />
       {targets.map((t) => {
         const p = geo.pos(t.string, t.fret);
@@ -68,6 +72,48 @@ export default function RiffLayer({ geo, notes, lands, events, live, colorOf, ou
         );
       })}
       {on.map((e) => <Live key={`d${e.start}-${e.string}`} part="dot" geo={geo} e={e} now={frame.now} colorOf={colorOf} />)}
+    </g>
+  );
+}
+
+/**
+ * The major triad as a compass: the triad notes the chord moved off, ghosted
+ * with their number, and a hooked line from each triad note to every
+ * interval reached from it — a fret or two along the same string.
+ */
+function Compass({ geo, ghosts, reaches }: { geo: FretGeo; ghosts: Ghost[]; reaches: Reach[] }) {
+  const { pos, R } = geo;
+  return (
+    <g>
+      {reaches.map((r, i) => {
+        // A short hop from the triad note to the interval, edge to edge.
+        // Reaching up the neck it bows to one side of the string, down the
+        // other, so a 1's ♭7 and 9 never share a line.
+        const p = pos(r.from.string, r.from.fret), q = pos(r.to.string, r.to.fret);
+        const side = r.to.fret > r.from.fret ? 1 : -1;
+        const bow = geo.at(geo.fretMid((r.from.fret + r.to.fret) / 2), geo.across(r.from.string + side * 0.5));
+        const c = { x: 2 * bow.x - (p.x + q.x) / 2, y: 2 * bow.y - (p.y + q.y) / 2 };
+        const edge = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+          const d = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+          return { x: from.x + ((to.x - from.x) / d) * (R + 2), y: from.y + ((to.y - from.y) / d) * (R + 2) };
+        };
+        const a = edge(p, c), b = edge(q, c);
+        return (
+          <g key={i} opacity={0.6}>
+            <path d={`M${a.x} ${a.y}Q${c.x} ${c.y} ${b.x} ${b.y}`} stroke={INK} strokeWidth={1.25} fill="none" />
+            <Arrowhead from={c} to={b} />
+          </g>
+        );
+      })}
+      {ghosts.map((g) => {
+        const p = pos(g.string, g.fret);
+        return (
+          <g key={`${g.string}:${g.fret}`}>
+            <circle cx={p.x} cy={p.y} r={R} fill="#fff" stroke={INK} strokeWidth={1.25} strokeDasharray="2.5 2" />
+            <text x={p.x} y={p.y + R * 0.34} fontSize={R * 0.9} fontWeight={700} textAnchor="middle" fill="#a8a29e">{g.label}</text>
+          </g>
+        );
+      })}
     </g>
   );
 }
@@ -85,10 +131,10 @@ function Ghosts({ geo, notes, lands, faded, colorOf, outside, numbered }: {
   // Notes at the same spot share one ring and one badge: "1·3·4". Notes
   // struck together (a triad) share one step number.
   const order = steps(notes);
-  const spots = new Map<string, { s: number; f: number; orders: number[] }>();
+  const spots = new Map<string, { s: number; f: number; orders: number[]; label?: string }>();
   notes.forEach((x, i) => {
     const k = `${x.string}:${x.fret}`;
-    const spot = spots.get(k) ?? { s: x.string, f: x.fret, orders: [] };
+    const spot = spots.get(k) ?? { s: x.string, f: x.fret, orders: [], label: x.label };
     if (!spot.orders.includes(order[i])) spot.orders.push(order[i]);
     spots.set(k, spot);
   });
@@ -133,18 +179,19 @@ function Ghosts({ geo, notes, lands, faded, colorOf, outside, numbered }: {
         }
         return null;
       })}
-      {[...spots.values()].map(({ s, f, orders }) => {
+      {[...spots.values()].map(({ s, f, orders, label: named }) => {
         const p = pos(s, f);
         // Long runs (an arpeggio up and back) would make an unreadable badge.
         const label = orders.length > 3 ? `${orders[0]}…${orders[orders.length - 1]}` : orders.join("·");
         const w = Math.max(12, label.length * 5.6 + 6);
-        const out = outside(s, f);
+        const out = named ?? outside(s, f);
         return (
           <g key={`${s}:${f}`}>
             {out && (
               <>
                 <circle cx={p.x} cy={p.y} r={R} fill={colorOf(s, f)} />
-                <text x={p.x} y={p.y + R * 0.34} fontSize={R * 0.9} fontWeight={700} textAnchor="middle" fill={INK}>{out}</text>
+                <text x={p.x} y={p.y + R * 0.34} fontSize={R * 0.9} fontWeight={700} textAnchor="middle"
+                  fill={colorOf(s, f) === INK ? "#fff" : INK}>{out}</text>
               </>
             )}
             <circle cx={p.x} cy={p.y} r={R + 3} fill="none" stroke={INK} strokeWidth={1.75} />

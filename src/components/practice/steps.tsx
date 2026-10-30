@@ -1,3 +1,4 @@
+import { Dress, compassLines, formulaOf } from "@/lib/compass";
 import { DiatonicChord } from "@/lib/harmony";
 import { ANY_STRINGS, Aim, Rhythm, Segment, shapeLines, targetLines, toneLines, walkLines } from "@/lib/lines";
 import { Riff, RiffNote, barsOf, licksFor, riffsFor, shifted } from "@/lib/riffs";
@@ -112,6 +113,66 @@ export const shapes = defineStep<{ low: number }>({
   ),
 });
 
+// ---------- Intervals ----------
+
+const DRESSES: { value: Dress; label: string }[] = [
+  { value: "chord", label: "as played" },
+  { value: "6", label: "6" },
+  { value: "7", label: "7" },
+  { value: "9", label: "9" },
+  { value: "11", label: "11" },
+];
+
+/** Every bar's compass, or — with no progression — the chord in focus (else I) alone. */
+const compassBars = (ctx: PracticeCtx, dress: Dress, alone: DiatonicChord | null) =>
+  compassLines(
+    ctx.progression.length ? ctx.progression : [[alone ?? ctx.focus ?? ctx.chordOf({ degree: 0, kind: ctx.kind })]],
+    ctx.keyPc, ctx.scale, ctx.lo, dress,
+  );
+
+export const intervals = defineStep<{ dress: Dress }>({
+  id: "intervals",
+  label: "Intervals",
+  how: "Find the major triad on the chord's root, then reach: ♭7 and 7 sit just under the 1, 9 just over it; ♭3 one fret under the 3, 11 one over; 6 two over the 5. Play up the chord and land on the note that names it.",
+  initial: { dress: "chord" },
+  phrase: (ctx, sel) => {
+    const bars = compassBars(ctx, sel.dress, null);
+    const many = ctx.progression.length > 0;
+    const at = (chord: DiatonicChord | null, idx: number) => (many ? bars[idx % bars.length] : compassBars(ctx, sel.dress, chord)[0]);
+    return {
+      id: `intervals-${sel.dress}`,
+      name: "Intervals",
+      numbered: true,
+      lands: true,
+      notesFor: (chord, idx) => at(chord, idx).notes,
+      targetAfter: (idx) => (many && bars.length > 1 ? bars[(idx + 1) % bars.length].notes.slice(0, 1) : []),
+      compassFor: (idx) => at(ctx.focus, idx),
+    };
+  },
+  Options: ({ ctx, sel, setSel }) => {
+    const chord = ctx.focus ?? ctx.chordOf({ degree: 0, kind: ctx.kind });
+    const f = formulaOf(chord, ctx.scale, sel.dress);
+    return (
+      <div className="space-y-2">
+        <Toggle options={DRESSES} value={sel.dress} onPick={(dress) => {
+          setSel({ dress });
+          ctx.preview(intervals.phrase(ctx, { dress }));
+        }} />
+        {/* The chord in focus as its formula, and the note that names it. */}
+        <p className="text-center text-sm text-neutral-600">
+          <b className="text-neutral-900">{f.name}</b>
+          <span className="mx-2 text-neutral-300">=</span>
+          {f.tones.map((t) => (
+            <span key={t.semis} className={`mx-0.5 inline-block min-w-6 rounded-md px-1 tabular-nums ${
+              t === f.aim ? "bg-neutral-800 font-bold text-neutral-50" : "bg-neutral-100"}`}>{t.label}</span>
+          ))}
+          <span className="ml-2 text-xs text-neutral-400">land on the {f.aim.label}</span>
+        </p>
+      </div>
+    );
+  },
+});
+
 // ---------- Lines ----------
 
 export const lines = defineStep<{ rhythm: Rhythm }>({
@@ -218,6 +279,6 @@ export const phrases = defineStep<{ id: string | null; move: boolean }>({
 
 /**
  * The steps, in order: the ladder from hearing each change land, through
- * the chord's notes and shapes, to lines that join the chords, to whole phrases.
+ * the chord's notes and shapes, its intervals found from the triad, to lines that join the chords, to whole phrases.
  */
-export const STEPS = [targets, chordTones, shapes, lines, phrases];
+export const STEPS = [targets, chordTones, shapes, intervals, lines, phrases];
