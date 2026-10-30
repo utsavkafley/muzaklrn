@@ -85,23 +85,30 @@ export function toneLines(bars: Segment[][], lo: number, rhythm: Rhythm): RiffNo
 /** Every string set at once: shapes are picked from all four. */
 export const ANY_STRINGS = -1;
 
-/** A three-string shape on the neck: its lowest string, and a fret on it and the two above. */
-export interface Placed { s: number; frets: number[] }
+/** A three-string shape on the neck: its lowest string, a fret on it and the two above, and which triad note is lowest (0 the 1, 1 the 3, 2 the 5). */
+export interface Placed { s: number; frets: number[]; bottom: number }
+
+/** Any triad note may be lowest: the shape nearest the last one wins. */
+export const NEAREST = -1;
 
 /**
  * A triad shape for every segment (its first three pitch classes), inside
  * the hand position wherever one fits, on one set of three strings or any.
  * The first sits mid-hand, each after it is the shape whose notes move least
  * from the one before — the inversion a good rhythm player reaches for.
+ * With `bottom` set, every chord takes that one shape (its 1, 3 or 5
+ * lowest), the way you learn a shape: the same grip, chord after chord.
  */
-export function placeShapes(bars: Segment[][], low: number, lo: number): (Placed | null)[][] {
+export function placeShapes(bars: Segment[][], low: number, lo: number, bottom = NEAREST): (Placed | null)[][] {
   const sets = low === ANY_STRINGS ? [0, 1, 2, 3] : [low];
   const inHand = (fr: number[]) => fr.every((f) => (f >= lo && f <= lo + 4) || (f === 0 && lo <= 1));
   const pitch = (x: Placed) => x.frets.reduce((a, f, i) => a + midiAt(x.s + i, f), 0) / 3;
   const run = (from: number | null) => {
     let last = from;
     const out = bars.map((segs) => segs.map((seg) => {
-      const all = sets.flatMap((s) => triadShapes(seg.pcs.slice(0, 3), s).map((sh) => ({ s, frets: sh.frets })));
+      const all = sets.flatMap((s) => triadShapes(seg.pcs.slice(0, 3), s)
+        .filter((sh) => bottom === NEAREST || sh.inversion === bottom)
+        .map((sh) => ({ s, frets: sh.frets, bottom: sh.inversion })));
       const fits = all.filter((x) => inHand(x.frets));
       const pool = fits.length ? fits : all;
       if (!pool.length) return null;
@@ -117,8 +124,8 @@ export function placeShapes(bars: Segment[][], low: number, lo: number): (Placed
 }
 
 /** Each chord's triad shape, struck on beats 1 and 3, or once for each chord of a split bar. */
-export function shapeLines(bars: Segment[][], low: number, lo: number): RiffNote[][] {
-  return placeShapes(bars, low, lo).map((shapes, b) => {
+export function shapeLines(bars: Segment[][], low: number, lo: number, bottom = NEAREST): RiffNote[][] {
+  return placeShapes(bars, low, lo, bottom).map((shapes, b) => {
     const per = bars[b].length === 2 ? 1 : 2;
     return shapes.flatMap((sh, k) => (sh
       ? Array.from({ length: per }, (_, r) => sh.frets.map((f, si) => ({
@@ -127,6 +134,10 @@ export function shapeLines(bars: Segment[][], low: number, lo: number): RiffNote
       : []));
   });
 }
+
+/** A placed shape's notes, low string to high, as its segment's chord names them: "♭3 5 1". */
+export const shapeOrder = (seg: Segment, p: Placed) =>
+  p.frets.map((f, i) => nameIn(seg, pitchAt(p.s + i, f))).join(" ");
 
 /** A chord tone's role, by its interval above the chord's root: 1, ♭3, 3, 5, ♭7… */
 export function roleLabel(semisAboveRoot: number): string {

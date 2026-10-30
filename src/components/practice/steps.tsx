@@ -1,6 +1,6 @@
 import { Dress, compassLines, formulaOf } from "@/lib/compass";
 import { DiatonicChord } from "@/lib/harmony";
-import { ANY_STRINGS, Rhythm, Segment, shapeLines, toneLines } from "@/lib/lines";
+import { ANY_STRINGS, NEAREST, Placed, Rhythm, Segment, placeShapes, shapeLines, shapeOrder, toneLines } from "@/lib/lines";
 import { RiffNote } from "@/lib/riffs";
 import { STRING_SETS } from "@/lib/shapes";
 import { Phrase, PracticeCtx, defineStep } from "./types";
@@ -74,22 +74,67 @@ export const chordTones = defineStep<{ rhythm: Rhythm }>({
   ),
 });
 
-// ---------- Shapes ----------
+// ---------- Triads ----------
 
 const SETS = [{ value: ANY_STRINGS, label: "any strings" }, ...STRING_SETS.map((s) => ({ value: s.low, label: s.label }))];
+const BOTTOMS = [
+  { value: NEAREST, label: "nearest" },
+  { value: 0, label: "1 low" },
+  { value: 1, label: "3 low" },
+  { value: 2, label: "5 low" },
+];
 
-export const shapes = defineStep<{ low: number }>({
+interface ShapeSel { low: number; bottom: number }
+
+/**
+ * Which triad shape: on which strings, and which note lowest. The strings
+ * keep the hand in one place; the lowest note fixes one grip, to learn it
+ * chord after chord.
+ */
+function ShapePicker({ sel, onPick }: { sel: ShapeSel; onPick: (s: ShapeSel) => void }) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+      <Toggle options={SETS} value={sel.low} onPick={(low) => onPick({ ...sel, low })} />
+      <span aria-hidden className="h-4 w-px bg-neutral-200" />
+      <Toggle options={BOTTOMS} value={sel.bottom} onPick={(bottom) => onPick({ ...sel, bottom })} />
+    </div>
+  );
+}
+
+/** The shape on show, named: its strings, and its notes low to high. */
+function ShapeName({ seg, placed }: { seg: Segment | undefined; placed: Placed | null | undefined }) {
+  if (!seg || !placed) return null;
+  const strings = STRING_SETS.find((x) => x.low === placed.s)?.label;
+  return (
+    <p className="text-center text-xs text-neutral-500">
+      shape <b className="text-neutral-800">{strings}</b>
+      <span className="mx-1.5 text-neutral-300">·</span>
+      <span className="tabular-nums text-neutral-800">{shapeOrder(seg, placed)}</span>
+      <span className="ml-1.5 text-neutral-400">low to high</span>
+    </p>
+  );
+}
+
+export const shapes = defineStep<ShapeSel>({
   id: "shapes",
   label: "Triads",
-  how: "Each chord as a three-string triad inside the position, the one nearest the last. Watch how little the hand moves between chords.",
-  initial: { low: ANY_STRINGS },
-  phrase: (ctx, sel) => overBars(ctx, `shapes-${sel.low}`, "Shapes", (bars) => shapeLines(bars, sel.low, ctx.lo)),
-  Options: ({ ctx, sel, setSel }) => (
-    <Toggle options={SETS} value={sel.low} onPick={(low) => {
-      setSel({ low });
-      ctx.preview(shapes.phrase(ctx, { low }));
-    }} />
-  ),
+  how: "Each chord as a three-string triad inside the position, the one nearest the last — watch how little the hand moves. Pick a lowest note to fix one shape and learn it chord after chord.",
+  initial: { low: ANY_STRINGS, bottom: NEAREST },
+  phrase: (ctx, sel) => overBars(ctx, `shapes-${sel.low}-${sel.bottom}`, "Shapes", (bars) => shapeLines(bars, sel.low, ctx.lo, sel.bottom)),
+  Options: ({ ctx, sel, setSel }) => {
+    const bars = barsOf_(ctx, null);
+    const idx = ctx.bar % bars.length;
+    const placed = placeShapes(bars, sel.low, ctx.lo, sel.bottom)[idx]?.[0];
+    return (
+      <div className="space-y-2">
+        <ShapePicker sel={sel} onPick={(next) => {
+          setSel(next);
+          ctx.preview(shapes.phrase(ctx, next));
+        }} />
+        <ShapeName seg={bars[idx]?.[0]} placed={placed} />
+      </div>
+    );
+  },
 });
 
 // ---------- Intervals ----------
@@ -103,23 +148,26 @@ const DRESSES: { value: Dress; label: string }[] = [
 ];
 
 /** Every bar's compass, or — with no progression — the chord in focus (else I) alone. */
-const compassBars = (ctx: PracticeCtx, dress: Dress, alone: DiatonicChord | null) =>
+const compassBars = (ctx: PracticeCtx, sel: IntervalSel, alone: DiatonicChord | null) =>
   compassLines(
     ctx.progression.length ? ctx.progression : [[alone ?? ctx.focus ?? ctx.chordOf({ degree: 0, kind: ctx.kind })]],
-    ctx.keyPc, ctx.scale, ctx.lo, dress,
+    ctx.keyPc, ctx.scale, ctx.lo, sel.dress, sel.low, sel.bottom,
   );
 
-export const intervals = defineStep<{ dress: Dress }>({
+interface IntervalSel extends ShapeSel { dress: Dress }
+
+export const intervals = defineStep<IntervalSel>({
   id: "intervals",
   label: "Intervals",
   how: "Find the major triad on the chord's root, then reach: ♭7 and 7 sit just under the 1, 9 just over it; ♭3 one fret under the 3, 11 one over; 6 two over the 5. Play up the chord and land on the note that names it.",
-  initial: { dress: "chord" },
+  // His first shape: the 1 3 5 on the D, G and B strings, out of the E-shape barre.
+  initial: { dress: "chord", low: 2, bottom: NEAREST },
   phrase: (ctx, sel) => {
-    const bars = compassBars(ctx, sel.dress, null);
+    const bars = compassBars(ctx, sel, null);
     const many = ctx.progression.length > 0;
-    const at = (chord: DiatonicChord | null, idx: number) => (many ? bars[idx % bars.length] : compassBars(ctx, sel.dress, chord)[0]);
+    const at = (chord: DiatonicChord | null, idx: number) => (many ? bars[idx % bars.length] : compassBars(ctx, sel, chord)[0]);
     return {
-      id: `intervals-${sel.dress}`,
+      id: `intervals-${sel.dress}-${sel.low}-${sel.bottom}`,
       name: "Intervals",
       numbered: true,
       lands: true,
@@ -131,11 +179,20 @@ export const intervals = defineStep<{ dress: Dress }>({
   Options: ({ ctx, sel, setSel }) => {
     const chord = ctx.focus ?? ctx.chordOf({ degree: 0, kind: ctx.kind });
     const f = formulaOf(chord, ctx.scale, sel.dress);
+    // The shape found first: the major triad on the chord's root, named 1 3 5.
+    const bars = compassBars(ctx, sel, null);
+    const placed = bars[ctx.bar % bars.length]?.shapes[0];
+    const r = (ctx.keyPc + chord.semis) % 12;
+    const major: Segment = { pcs: [r, (r + 4) % 12, (r + 7) % 12] };
     return (
       <div className="space-y-2">
         <Toggle options={DRESSES} value={sel.dress} onPick={(dress) => {
-          setSel({ dress });
-          ctx.preview(intervals.phrase(ctx, { dress }));
+          setSel({ ...sel, dress });
+          ctx.preview(intervals.phrase(ctx, { ...sel, dress }));
+        }} />
+        <ShapePicker sel={sel} onPick={(next) => {
+          setSel({ ...sel, ...next });
+          ctx.preview(intervals.phrase(ctx, { ...sel, ...next }));
         }} />
         {/* The chord in focus as its formula, and the note that names it. */}
         <p className="text-center text-sm text-neutral-600">
@@ -147,6 +204,7 @@ export const intervals = defineStep<{ dress: Dress }>({
           ))}
           <span className="ml-2 text-xs text-neutral-400">land on the {f.aim.label}</span>
         </p>
+        <ShapeName seg={major} placed={placed} />
       </div>
     );
   },

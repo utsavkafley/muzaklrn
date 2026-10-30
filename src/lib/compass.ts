@@ -11,7 +11,7 @@
 // 9, 11 and 13 are the 2, 4 and 6 an octave up — the same spots.
 
 import { DiatonicChord } from "./harmony";
-import { ANY_STRINGS, Segment, placeShapes } from "./lines";
+import { ANY_STRINGS, NEAREST, Placed, Segment, placeShapes } from "./lines";
 import { RiffNote } from "./riffs";
 import { pitchAt } from "./theory";
 
@@ -100,7 +100,11 @@ export function formulaOf(chord: DiatonicChord, scale: number[], dress: Dress): 
 export interface Ghost { string: number; fret: number; label: string }
 /** A reach from a triad note to an interval found from it. */
 export interface Reach { from: { string: number; fret: number }; to: { string: number; fret: number } }
-export interface CompassBar { notes: RiffNote[]; ghosts: Ghost[]; reaches: Reach[] }
+export interface CompassBar {
+  notes: RiffNote[]; ghosts: Ghost[]; reaches: Reach[];
+  /** Each chord's major triad shape, as placed. */
+  shapes: (Placed | null)[];
+}
 
 /**
  * For every chord: its root's major triad as a shape inside the position,
@@ -108,16 +112,17 @@ export interface CompassBar { notes: RiffNote[]; ghosts: Ghost[]; reaches: Reach
  * up the chord, then landing on the note that names it, held.
  */
 export function compassLines(
-  chords: DiatonicChord[][], keyPc: number, scale: number[], lo: number, dress: Dress, low = ANY_STRINGS,
+  chords: DiatonicChord[][], keyPc: number, scale: number[], lo: number, dress: Dress,
+  low = ANY_STRINGS, bottom = NEAREST,
 ): CompassBar[] {
   const majors: Segment[][] = chords.map((cs) => cs.map((c) => {
     const r = (keyPc + c.semis) % 12;
     return { pcs: [r, (r + 4) % 12, (r + 7) % 12] };
   }));
-  const shapes = placeShapes(majors, low, lo);
+  const shapes = placeShapes(majors, low, lo, bottom);
   return chords.map((cs, b) => {
     const span = 8 / Math.max(cs.length, 1);
-    const bar: CompassBar = { notes: [], ghosts: [], reaches: [] };
+    const bar: CompassBar = { notes: [], ghosts: [], reaches: [], shapes: shapes[b] };
     cs.forEach((c, k) => {
       const sh = shapes[b][k];
       if (!sh) return;

@@ -43,6 +43,8 @@ export interface PracticeCtx {
   focus: DiatonicChord | null;
   /** The progression's bars that hold chords, each as its one or two chords. */
   progression: DiatonicChord[][];
+  /** Which of the progression's chord bars is on the neck (0 with none). */
+  bar: number;
   /** The hand position: frets lo to lo + 4. */
   lo: number;
   fillFor: (string: number, fret: number) => string;

@@ -122,14 +122,12 @@ export default function Page() {
   const { drag, bind, wasDrag } = useChordDrag(dropChord);
 
   const tapBar = (i: number) => {
-    // Tapping a bar also puts it on the neck.
+    // Tapping a bar aims at it and puts it on the neck — as often as you
+    // like; emptying one is in its hold menu. A tap on an aimed empty bar
+    // removes the bar, as long as one is left.
     setViewBar(i);
     if (target !== i) return setTarget(i);
-    // A second tap on the bar you are aiming at empties it; a tap on an
-    // aimed empty bar removes the bar, as long as one is left.
-    if (bars[i].length) {
-      setBars(bars.map((b, k) => (k === i ? [] : b)));
-    } else if (bars.length > 1) {
+    if (!bars[i].length && bars.length > 1) {
       const next = bars.filter((_, k) => k !== i);
       setBars(next);
       setTarget(nextEmpty(next, i - 1));
@@ -154,6 +152,13 @@ export default function Page() {
     setTarget(0);
     setHeld(null);
     setViewBar(null);
+  };
+
+  /** Take one chord out of a bar; with none left the bar waits empty, aimed at. */
+  const removeChord = (bar: number, half: number) => {
+    const next = bars.map((b, k) => (k === bar ? b.filter((_, h) => h !== half) : b));
+    setBars(next);
+    if (!next[bar].length) setTarget(bar);
   };
 
   /** Holding a bar changes its chord, in the key or out of it. */
@@ -379,17 +384,17 @@ export default function Page() {
   const lo = note ? Math.max(0, Math.min(11, homeFret(noteIndex(note)) - 1 + shift)) : 0;
 
   // What the practice steps see of the page.
+  // The bar on show, counted among the bars that hold chords.
+  const showIdx = shownBar >= 0 ? bars.slice(0, shownBar).filter((b) => b.length).length : 0;
   const practiceCtx: PracticeCtx | null = note && name && scale && chords
     ? {
       note, name, keyPc: noteIndex(note), scale, shown, mode, kind, chordOf, focus: chord,
       progression: bars.filter((b) => b.length).map((b) => b.map(chordOf)),
-      lo, fillFor: gripFill, preview,
+      bar: showIdx, lo, fillFor: gripFill, preview,
     }
     : null;
   const practiceStep = STEPS.find((x) => x.id === step) ?? STEPS[0];
   const phrase = practiceCtx ? practiceStep.phrase(practiceCtx, sels[step] ?? practiceStep.initial) : null;
-  // The bar of the progression on show: the one playing, else the first.
-  const showIdx = shownBar >= 0 ? bars.slice(0, shownBar).filter((b) => b.length).length : 0;
   const phraseNotes = phrase ? phrase.notesFor(chord, showIdx) : [];
   const targets = phrase?.targetAfter?.(showIdx) ?? [];
   const phraseBars = barsOf(phraseNotes);
@@ -651,6 +656,7 @@ export default function Page() {
                   fillFor={gripFill}
                   variantsFor={(bar, half) => variantsOf(name, scale, bars[bar][half]?.degree ?? 0)}
                   onAlter={alterChord}
+                  onRemove={removeChord}
                   onTapBar={tapBar}
                   onAddBar={addBar}
                   onClear={clearStrip}

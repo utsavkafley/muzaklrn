@@ -21,6 +21,8 @@ interface Props {
   /** Every chord this bar-half could become, in key or out. */
   variantsFor: (bar: number, half: number) => DiatonicChord[];
   onAlter: (bar: number, half: number, ref: ChordRef) => void;
+  /** Take one chord out of a bar: the bar's only one empties it, a split bar keeps the other. */
+  onRemove: (bar: number, half: number) => void;
   onTapBar: (i: number) => void;
   onAddBar: () => void;
   onClear: () => void;
@@ -37,7 +39,7 @@ const HOLD_MS = 450;
  * same root, in the key or out of it.
  */
 export default function ProgressionStrip({
-  bars, chordOf, target, playing, over, canAdd, keyNote, fillFor, variantsFor, onAlter,
+  bars, chordOf, target, playing, over, canAdd, keyNote, fillFor, variantsFor, onAlter, onRemove,
   onTapBar, onAddBar, onClear,
 }: Props) {
   const [menu, setMenu] = useState<{ bar: number; half: number } | null>(null);
@@ -129,6 +131,10 @@ export default function ProgressionStrip({
                     onAlter(i, menu.half, { degree: c.degree, kind: c.kind, alt: c.alt });
                     setMenu(null);
                   }}
+                  onRemove={() => {
+                    onRemove(i, menu.half);
+                    setMenu(null);
+                  }}
                   onClose={() => setMenu(null)}
                 />
               )}
@@ -154,11 +160,12 @@ export default function ProgressionStrip({
  * The chords a bar-half can turn into: the same root, every shape. Ones that
  * reach outside the key read as tension — they lean toward the next chord.
  */
-function ChangeMenu({ current, variants, align, onPick, onClose }: {
+function ChangeMenu({ current, variants, align, onPick, onRemove, onClose }: {
   current: DiatonicChord;
   variants: DiatonicChord[];
   align: "left" | "center" | "right";
   onPick: (c: DiatonicChord) => void;
+  onRemove: () => void;
   onClose: () => void;
 }) {
   const place = align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
@@ -186,6 +193,10 @@ function ChangeMenu({ current, variants, align, onPick, onClose }: {
             </button>
           ))}
         </div>
+        <button onClick={onRemove}
+          className="mt-2 w-full rounded-lg border border-neutral-200 py-1 text-sm text-neutral-500 hover:border-neutral-400 hover:text-neutral-800">
+          Remove {current.name}
+        </button>
         <p className="mt-2 text-xs leading-snug text-neutral-500">
           Same root, any shape. A note from outside the key leans toward the next chord — lift ii to II or II7
           and it pulls into V.
