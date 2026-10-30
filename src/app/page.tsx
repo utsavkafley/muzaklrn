@@ -79,8 +79,10 @@ export default function Page() {
   const [bars, setBars] = useState<Bar[]>(emptyStrip);
   /** The bar the next tapped chord lands in; null once every bar is full. */
   const [target, setTarget] = useState<number | null>(0);
-  /** The chord last tapped or dropped, shown on the neck while nothing plays. */
+  /** The chord last tapped or dropped, shown on the neck while nothing plays and no bar holds a chord. */
   const [held, setHeld] = useState<ChordRef | null>(null);
+  /** The bar shown on the neck while nothing plays: the one last filled, changed or tapped. */
+  const [viewBar, setViewBar] = useState<number | null>(null);
 
   const audition = (ref: ChordRef) => {
     if (!note || !scale) return;
@@ -93,6 +95,7 @@ export default function Page() {
     if (target === null) return;
     const next = bars.map((b, i) => (i === target ? [ref] : b));
     setBars(next);
+    setViewBar(target);
     // On to the next empty bar, wrapping; none left and the strip is done.
     setTarget(nextEmpty(next, target));
   };
@@ -102,7 +105,10 @@ export default function Page() {
   const dropChord = (ref: ChordRef, spot: DropSpot) => {
     audition(ref);
     if (spot.bar === "new") {
-      if (bars.length < MAX_BARS) setBars([...bars, [ref]]);
+      if (bars.length < MAX_BARS) {
+        setBars([...bars, [ref]]);
+        setViewBar(bars.length);
+      }
       return;
     }
     const i = spot.bar;
@@ -110,11 +116,14 @@ export default function Page() {
     const bar = !cur.length || spot.side === "left" ? [ref] : [cur[0], ref];
     const next = bars.map((b, k) => (k === i ? bar : b));
     setBars(next);
+    setViewBar(i);
     if (target === i) setTarget(nextEmpty(next, i));
   };
   const { drag, bind, wasDrag } = useChordDrag(dropChord);
 
   const tapBar = (i: number) => {
+    // Tapping a bar also puts it on the neck.
+    setViewBar(i);
     if (target !== i) return setTarget(i);
     // A second tap on the bar you are aiming at empties it; a tap on an
     // aimed empty bar removes the bar, as long as one is left.
@@ -137,18 +146,21 @@ export default function Page() {
   const loadPreset = (p: Bar[]) => {
     setBars(p);
     setTarget(null);
+    setViewBar(null);
   };
 
   const clearStrip = () => {
     setBars(emptyStrip());
     setTarget(0);
     setHeld(null);
+    setViewBar(null);
   };
 
   /** Holding a bar changes its chord, in the key or out of it. */
   const alterChord = (bar: number, half: number, ref: ChordRef) => {
     audition(ref);
     setBars(bars.map((b, k) => (k === bar ? b.map((r, h) => (h === half ? ref : r)) : b)));
+    setViewBar(bar);
   };
 
   // ---- saved progressions ----
@@ -318,8 +330,15 @@ export default function Page() {
   const playing = beat && beat.bar >= 0 && bars[beat.bar]?.length ? { bar: beat.bar, half: beat.half } : null;
   // Still, it's the chord last tapped — or, with a progression and nothing
   // tapped, its first chord, which is where playing will start.
-  const firstRef = bars.find((b) => b.length)?.[0] ?? null;
-  const shownRef = running ? (playing ? bars[playing.bar][playing.half] ?? bars[playing.bar][0] : null) : held ?? firstRef;
+  // With a progression, the neck always shows one of its bars — the one
+  // playing, else the one last touched, else the first — so the chord named
+  // under it and the notes on it are always the same chord.
+  const firstBar = bars.findIndex((b) => b.length);
+  const stillBar = viewBar !== null && bars[viewBar]?.length ? viewBar : firstBar;
+  const shownBar = running ? (playing ? playing.bar : -1) : stillBar;
+  const shownRef = shownBar >= 0
+    ? bars[shownBar][running && playing ? playing.half : 0] ?? bars[shownBar][0]
+    : running ? null : held;
   const chord = name && scale && shownRef ? chordOf(shownRef) : null;
   const mood: Mood | null = running && chord ? chord.mood : null;
 
@@ -370,7 +389,7 @@ export default function Page() {
   const practiceStep = STEPS.find((x) => x.id === step) ?? STEPS[0];
   const phrase = practiceCtx ? practiceStep.phrase(practiceCtx, sels[step] ?? practiceStep.initial) : null;
   // The bar of the progression on show: the one playing, else the first.
-  const showIdx = running && playing ? bars.slice(0, playing.bar).filter((b) => b.length).length : 0;
+  const showIdx = shownBar >= 0 ? bars.slice(0, shownBar).filter((b) => b.length).length : 0;
   const phraseNotes = phrase ? phrase.notesFor(chord, showIdx) : [];
   const targets = phrase?.targetAfter?.(showIdx) ?? [];
   const phraseBars = barsOf(phraseNotes);

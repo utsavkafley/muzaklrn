@@ -46,7 +46,7 @@ const HIGH: Record<number, string> = { 1: "♭9", 2: "9", 3: "♯9", 5: "11", 6:
 
 const SUFFIX: Record<string, string> = {
   "0,4,7": "", "0,3,7": "m", "0,3,6": "°", "0,4,8": "+", "0,2,7": "sus2", "0,5,7": "sus4",
-  "0,4,7,9": "6", "0,3,7,9": "m6", "0,4,7,8": "(♭6)", "0,3,7,8": "m(♭6)", "0,3,6,8": "°(♭6)",
+  "0,4,7,9": "6", "0,2,4,7": "add9", "0,2,3,7": "m(add9)", "0,5,7,10": "7sus4", "0,3,7,9": "m6", "0,4,7,8": "(♭6)", "0,3,7,8": "m(♭6)", "0,3,6,8": "°(♭6)",
   "0,4,7,11": "maj7", "0,4,7,10": "7", "0,3,7,10": "m7", "0,3,6,10": "m7♭5", "0,3,7,11": "m(maj7)",
   "0,2,4,7,11": "maj9", "0,2,4,7,10": "9", "0,2,3,7,10": "m9", "0,1,3,7,10": "m7♭9", "0,1,3,6,10": "m7♭5♭9",
   "0,2,3,6,10": "m9♭5", "0,1,4,7,10": "7♭9",
@@ -69,22 +69,31 @@ export function formulaOf(chord: DiatonicChord, scale: number[], dress: Dress): 
     : dress === "11" ? [above(6), above(1), above(3)]
     : [];
   const base = dress === "chord" ? own : triad;
-  const stacked = dress === "9" || dress === "11";
+  // Past the 1 3 5 (and 7), a 2, 4 or 6 sits above the octave and is named
+  // there: the 9 of Cadd9, the 9 and 11 of Am11. A chord's own 6th stays a 6.
+  const stacked = dress === "9" || dress === "11" || (dress === "chord" && own.length > 3);
   const tones: Tone[] = [...base, ...extra]
     .filter((s, i, a) => a.indexOf(s) === i)
-    .map((s, i) => ({ semis: s, label: stacked && i >= 4 ? HIGH[s] ?? LOW[s] : LOW[s] }));
+    .map((s, i) => ({
+      semis: s,
+      label: stacked && (i >= 4 || (i === 3 && s !== 9 && s !== 10 && s !== 11)) ? HIGH[s] ?? LOW[s] : LOW[s],
+    }));
   const key = tones.map((t) => t.semis).sort((a, b) => a - b).join(",");
   const root = chord.name.match(/^[A-G][♯♭#b]?/)?.[0] ?? chord.name;
   const suffix = SUFFIX[key];
-  // The note that makes the chord: the last one added, else its 7th, else
-  // whatever replaced the major 3rd or 5th.
-  const aim = extra.length
-    ? tones[tones.length - 1]
-    : tones.find((t) => t.semis === 10 || t.semis === 11)
+  // The note that makes the chord — the last thing in its name: a sus
+  // chord's 2 or 4, else the last note stacked on (the 6 of C6, the 11 of
+  // Am11), else its 7th, else whatever replaced the major 3rd or 5th.
+  const sus = own[1] === 2 || own[1] === 5 ? tones[1] : undefined;
+  const aim = (dress === "chord" ? sus : undefined)
+    ?? (extra.length || own.length > 3 ? tones[tones.length - 1] : undefined)
+    ?? tones.find((t) => t.semis === 10 || t.semis === 11)
       ?? tones.find((t) => t.semis === 6 || t.semis === 8)
       ?? tones.find((t) => [3, 2, 5].includes(t.semis))
       ?? tones.find((t) => t.semis === 4)!;
-  return { name: suffix === undefined ? `${root} (${tones.map((t) => t.label).join(" ")})` : root + suffix, tones, aim };
+  const name = dress === "chord" ? chord.name
+    : suffix === undefined ? `${root} (${tones.map((t) => t.label).join(" ")})` : root + suffix;
+  return { name, tones, aim };
 }
 
 /** One of the major triad's notes the chord moved off: drawn as a ghost, with where it went. */

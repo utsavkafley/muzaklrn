@@ -106,7 +106,11 @@ export interface ChordRef {
   alt?: AltShape;
 }
 
-/** Chord shapes, as semitones above the root, a chord can be altered to. */
+/**
+ * Chord shapes, as semitones above the root, a chord can be altered to.
+ * The 9th and 11th are written an octave up (14, 17), where a chord chart
+ * names them.
+ */
 export const ALT_SHAPES = {
   maj: [4, 7],
   min: [3, 7],
@@ -118,10 +122,19 @@ export const ALT_SHAPES = {
   dim: [3, 6],
   "m7♭5": [3, 6, 10],
   aug: [4, 8],
+  "6": [4, 7, 9],
+  m6: [3, 7, 9],
+  add9: [4, 7, 14],
+  "m(add9)": [3, 7, 14],
+  maj9: [4, 7, 11, 14],
+  "9": [4, 7, 10, 14],
+  m9: [3, 7, 10, 14],
+  m11: [3, 7, 10, 14, 17],
+  "7sus4": [5, 7, 10],
 } as const;
 export type AltShape = keyof typeof ALT_SHAPES;
 /** Letters each interval climbs from the root, for spelling: 3rd two, 5th four, 7th six. */
-const LETTER_STEPS: Record<number, number> = { 2: 1, 3: 2, 4: 2, 5: 3, 6: 4, 7: 4, 8: 4, 9: 6, 10: 6, 11: 6 };
+const LETTER_STEPS: Record<number, number> = { 2: 1, 3: 2, 4: 2, 5: 3, 6: 4, 7: 4, 8: 4, 9: 5, 10: 6, 11: 6, 14: 1, 17: 3 };
 
 export interface DiatonicChord extends ChordRef {
   /** Semitones of the chord's root above the key's root. */
@@ -159,6 +172,15 @@ const SHAPES: Record<string, { shape: string; upper: boolean; num: string; sym: 
   "4,8,11": { shape: "augMaj7", upper: true, num: "+maj7", sym: "+maj7" },
   "2,7": { shape: "sus2", upper: true, num: "sus2", sym: "sus2" },
   "5,7": { shape: "sus4", upper: true, num: "sus4", sym: "sus4" },
+  "4,7,9": { shape: "6", upper: true, num: "6", sym: "6" },
+  "3,7,9": { shape: "m6", upper: false, num: "6", sym: "m6" },
+  "4,7,14": { shape: "add9", upper: true, num: "add9", sym: "add9" },
+  "3,7,14": { shape: "m(add9)", upper: false, num: "(add9)", sym: "m(add9)" },
+  "4,7,11,14": { shape: "maj9", upper: true, num: "maj9", sym: "maj9" },
+  "4,7,10,14": { shape: "9", upper: true, num: "9", sym: "9" },
+  "3,7,10,14": { shape: "m9", upper: false, num: "9", sym: "m9" },
+  "3,7,10,14,17": { shape: "m11", upper: false, num: "11", sym: "m11" },
+  "5,7,10": { shape: "7sus4", upper: true, num: "7sus4", sym: "7sus4" },
 };
 
 /** The seven notes, in semitones above the root, or null without seven. */
@@ -226,7 +248,7 @@ function buildAltered(keyName: string, scale: number[], degree: number, shape: A
   // Spell each tone by letters from the root: a 3rd is two letters up, and so on.
   const spellTone = (k: number) =>
     k === 0 ? spellInterval(keyName, semis, degree) : spellInterval(keyName, tones[k], (degree + LETTER_STEPS[ivs[k - 1]]) % 7);
-  const kind: ChordKind = ivs.length === 3 ? "seventh" : ivs[0] === 2 ? "sus2" : ivs[0] === 5 ? "sus4" : "triad";
+  const kind: ChordKind = ivs.length >= 3 ? "seventh" : ivs[0] === 2 ? "sus2" : ivs[0] === 5 ? "sus4" : "triad";
   const chord = {
     degree, kind, alt: shape, semis, tones, shape: spec.shape,
     numeral: acc + (spec.upper ? ROMAN[degree] : ROMAN[degree].toLowerCase()) + spec.num,

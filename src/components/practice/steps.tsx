@@ -5,8 +5,11 @@ import { RiffNote } from "@/lib/riffs";
 import { STRING_SETS } from "@/lib/shapes";
 import { Phrase, PracticeCtx, defineStep } from "./types";
 
-/** A chord as a segment: its pitch classes in this key, root first. */
-const seg = (ctx: PracticeCtx, c: DiatonicChord): Segment => ({ pcs: c.tones.map((t) => (ctx.keyPc + t) % 12) });
+/** A chord as a segment: its pitch classes in this key, root first, each named as the chord names it. */
+const seg = (ctx: PracticeCtx, c: DiatonicChord): Segment => ({
+  pcs: c.tones.map((t) => (ctx.keyPc + t) % 12),
+  labels: Object.fromEntries(formulaOf(c, ctx.scale, "chord").tones.map((t) => [t.semis, t.label])),
+});
 /** The progression as segments, or — with none — the chord in focus (else I) on its own. */
 const barsOf_ = (ctx: PracticeCtx, alone: DiatonicChord | null): Segment[][] =>
   ctx.progression.length

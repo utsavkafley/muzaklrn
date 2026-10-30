@@ -10,7 +10,15 @@ import { triadShapes } from "./shapes";
 /** One chord's stretch of a bar: its pitch classes, root first. */
 export interface Segment {
   pcs: number[];
+  /** How the chord names each note, by semitones above its root: the 9 and 11 of Am11. */
+  labels?: Record<number, string>;
 }
+
+/** A note's name in its segment's chord: the chord's own name for it, else its plain interval. */
+const nameIn = (seg: Segment, pc: number) => {
+  const iv = (((pc - seg.pcs[0]) % 12) + 12) % 12;
+  return seg.labels?.[iv] ?? roleLabel(iv);
+};
 
 /** Frets in the window: four above `lo`, and the open strings when it starts at the nut. */
 export const windowFrets = (lo: number) =>
@@ -59,7 +67,7 @@ export function toneLines(bars: Segment[][], lo: number, rhythm: Rhythm): RiffNo
         let dir = 1;
         for (let t = 0; t < span; t += step) {
           const x = w[i];
-          notes.push({ at: k * span + t, len: step, string: x.string, fret: x.fret, label: roleLabel(x.pc - seg.pcs[0]) });
+          notes.push({ at: k * span + t, len: step, string: x.string, fret: x.fret, label: nameIn(seg, x.pc) });
           last = x.midi;
           if (w.length > 1) {
             if (i + dir < 0 || i + dir >= w.length) dir = -dir;
@@ -114,7 +122,7 @@ export function shapeLines(bars: Segment[][], low: number, lo: number): RiffNote
     const per = bars[b].length === 2 ? 1 : 2;
     return shapes.flatMap((sh, k) => (sh
       ? Array.from({ length: per }, (_, r) => sh.frets.map((f, si) => ({
-        at: k * 4 + r * 4, len: 4, string: sh.s + si, fret: f, label: roleLabel(pitchAt(sh.s + si, f) - bars[b][k].pcs[0]),
+        at: k * 4 + r * 4, len: 4, string: sh.s + si, fret: f, label: nameIn(bars[b][k], pitchAt(sh.s + si, f)),
       }))).flat()
       : []));
   });
