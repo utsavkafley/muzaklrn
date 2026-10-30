@@ -37,6 +37,92 @@ export function windowNotes(pcs: number[], lo: number): Spot[] {
 
 export type Rhythm = "quarters" | "eighths";
 
+/** Which chord tone a target aims for: the nearest of any, or always the 3rd or root. */
+export type Aim = "nearest" | "third" | "root";
+
+const nearestTo = (w: Spot[], midi: number) =>
+  w.reduce((b, x) => (Math.abs(x.midi - midi) < Math.abs(b.midi - midi) ? x : b));
+
+/**
+ * The landing note of every segment: one chord tone each, the one nearest
+ * the landing before it. Chained twice so the loop closes smoothly.
+ */
+function landings(bars: Segment[][], lo: number, aim: Aim): Spot[][] {
+  const pick = (seg: Segment) =>
+    aim === "root" ? [seg.pcs[0]] : aim === "third" ? [seg.pcs[1] ?? seg.pcs[0]] : seg.pcs;
+  const run = (from: number | null) => {
+    let last = from;
+    const out = bars.map((segs) => segs.flatMap((seg) => {
+      const w = windowNotes(pick(seg), lo);
+      if (!w.length) return [];
+      // Start the first chord on its root, low in the hand; after that, move least.
+      const x = last === null ? (w.find((s) => s.pc === seg.pcs[0]) ?? w[0]) : nearestTo(w, last);
+      last = x.midi;
+      return [x];
+    }));
+    return { out, last };
+  };
+  return run(run(null).last).out;
+}
+
+/**
+ * Targets: one note per chord, held, the smallest move from the one before.
+ * Only the change itself to play — the place to hear a chord arrive.
+ */
+export function targetLines(bars: Segment[][], lo: number, aim: Aim): RiffNote[][] {
+  return landings(bars, lo, aim).map((lands, b) => {
+    const span = 8 / Math.max(bars[b].length, 1);
+    return lands.map((x, k) => ({ at: k * span, len: span, string: x.string, fret: x.fret }));
+  });
+}
+
+/**
+ * Lines that walk from chord to chord: each segment opens on its landing,
+ * arcs through its own chord tones, and steps into the next landing from
+ * the scale note beside it. Chord tones on the beat, a step on the way in —
+ * the bones of every melodic solo over changes.
+ */
+export function walkLines(bars: Segment[][], scalePcs: number[], lo: number, rhythm: Rhythm): RiffNote[][] {
+  const lands = landings(bars, lo, "nearest");
+  const flat = lands.flat();
+  const scale = windowNotes(scalePcs, lo);
+  const step = rhythm === "quarters" ? 2 : 1;
+  let n = 0;
+  return bars.map((segs, b) => {
+    const span = 8 / Math.max(segs.length, 1);
+    const notes: RiffNote[] = [];
+    segs.forEach((seg, k) => {
+      const from = lands[b][k];
+      if (!from) return;
+      const to = flat[(++n) % flat.length];
+      const slots = span / step;
+      const path: Spot[] = [from];
+      // The arc: the chord's own notes, heading where there is more room
+      // and turning at the edge of the hand.
+      const w = windowNotes(seg.pcs, lo);
+      let i = w.findIndex((x) => x.midi === from.midi);
+      let dir = i < w.length / 2 ? 1 : -1;
+      while (path.length < slots - 1 && w.length > 1) {
+        if (i + dir < 0 || i + dir >= w.length) dir = -dir;
+        i += dir;
+        path.push(w[i]);
+      }
+      if (slots > 1) {
+        // The way in: the scale note beside the next landing, on the side
+        // the arc ended, unless that is where the arc already is.
+        const last = path[path.length - 1];
+        const below = [...scale].reverse().find((x) => x.midi < to.midi);
+        const above = scale.find((x) => x.midi > to.midi);
+        const side = last.midi < to.midi ? [below, above] : [above, below];
+        const into = side.find((x) => x && x.midi !== last.midi && to.midi - x.midi <= 2 && x.midi - to.midi <= 2);
+        path.push(into ?? last);
+      }
+      path.forEach((x, j) => notes.push({ at: k * span + j * step, len: step, string: x.string, fret: x.fret }));
+    });
+    return notes;
+  });
+}
+
 /**
  * A chord-tone line for every bar: each segment walks up its chord's notes
  * (and turns at the top or bottom of the window), one per beat or two, and
@@ -74,27 +160,36 @@ export function toneLines(bars: Segment[][], lo: number, rhythm: Rhythm): RiffNo
   return run(run(null).last).out;
 }
 
+/** Every string set at once: shapes are picked from all four. */
+export const ANY_STRINGS = -1;
+
 /**
- * A triad shape for every chord, on one set of three strings: the first as
- * near the window as it can be, each after it the shape nearest the one
- * before — the inversion that moves least. Struck on beats 1 and 3, or once
- * for each chord of a split bar.
+ * A triad shape for every chord, inside the hand position wherever one
+ * fits, on one set of three strings or any. The first sits mid-hand, each
+ * after it is the shape whose notes move least from the one before — the
+ * inversion a good rhythm player reaches for. Struck on beats 1 and 3, or
+ * once for each chord of a split bar.
  */
 export function shapeLines(bars: Segment[][], low: number, lo: number): RiffNote[][] {
+  const sets = low === ANY_STRINGS ? [0, 1, 2, 3] : [low];
+  const inHand = (fr: number[]) => fr.every((f) => (f >= lo && f <= lo + 4) || (f === 0 && lo <= 1));
+  const pitch = (s: number, fr: number[]) => fr.reduce((a, f, i) => a + midiAt(s + i, f), 0) / 3;
   const run = (from: number | null) => {
     let last = from;
     const out = bars.map((segs) => {
       const notes: RiffNote[] = [];
       const per = segs.length === 2 ? 1 : 2;
       segs.forEach((seg, k) => {
-        const shapes = triadShapes(seg.pcs.slice(0, 3), low);
-        if (!shapes.length) return;
-        const centre = (fr: number[]) => fr.reduce((a, b) => a + b, 0) / fr.length;
-        const aim = last ?? lo + 2;
-        const sh = shapes.reduce((b, x) => (Math.abs(centre(x.frets) - aim) < Math.abs(centre(b.frets) - aim) ? x : b));
-        last = centre(sh.frets);
+        const all = sets.flatMap((s) => triadShapes(seg.pcs.slice(0, 3), s).map((sh) => ({ s, frets: sh.frets })));
+        const fits = all.filter((x) => inHand(x.frets));
+        const pool = fits.length ? fits : all;
+        if (!pool.length) return;
+        // Measured in pitch, so shapes on different strings compare fairly.
+        const aim = last ?? midiAt(Math.min(...sets) + 1, lo + 2) + (low === ANY_STRINGS ? 7 : 0);
+        const sh = pool.reduce((b, x) => (Math.abs(pitch(x.s, x.frets) - aim) < Math.abs(pitch(b.s, b.frets) - aim) ? x : b));
+        last = pitch(sh.s, sh.frets);
         for (let r = 0; r < per; r++) {
-          sh.frets.forEach((f, si) => notes.push({ at: k * 4 + r * 4, len: 4, string: low + si, fret: f }));
+          sh.frets.forEach((f, si) => notes.push({ at: k * 4 + r * 4, len: 4, string: sh.s + si, fret: f }));
         }
       });
       return notes;

@@ -1,8 +1,8 @@
 import { DiatonicChord } from "@/lib/harmony";
-import { Rhythm, Segment, shapeLines, toneLines } from "@/lib/lines";
-import { Riff, barsOf, licksFor, riffsFor, shifted } from "@/lib/riffs";
+import { ANY_STRINGS, Aim, Rhythm, Segment, shapeLines, targetLines, toneLines, walkLines } from "@/lib/lines";
+import { Riff, RiffNote, barsOf, licksFor, riffsFor, shifted } from "@/lib/riffs";
 import { STRING_SETS } from "@/lib/shapes";
-import { PracticeCtx, defineStep } from "./types";
+import { Phrase, PracticeCtx, defineStep } from "./types";
 
 const MAX_FRET = 15;
 
@@ -33,30 +33,59 @@ function Toggle<T extends string | number>({ options, value, onPick }: {
   );
 }
 
-// ---------- Chord tones ----------
+/**
+ * A step over the progression from a line maker: one line per bar, or —
+ * with no progression — the chord in focus on its own. The next bar's first
+ * notes are ringed: where the change lands.
+ */
+function overBars(
+  ctx: PracticeCtx, id: string, name: string, make: (bars: Segment[][]) => RiffNote[][],
+  numbered = false,
+): Phrase {
+  const lines = make(barsOf_(ctx, null));
+  const many = ctx.progression.length > 0;
+  return {
+    id, name, roles: true, numbered,
+    notesFor: (chord, idx) => (many ? lines[idx % lines.length] : make(barsOf_(ctx, chord))[0]),
+    targetAfter: (idx) => (many && lines.length > 1 ? lines[(idx + 1) % lines.length].filter((x) => x.at === 0) : []),
+  };
+}
 
 const RHYTHMS: { value: Rhythm; label: string }[] = [
   { value: "quarters", label: "♩ one per beat" },
   { value: "eighths", label: "♫ two per beat" },
 ];
 
+// ---------- Targets ----------
+
+const AIMS: { value: Aim; label: string }[] = [
+  { value: "nearest", label: "nearest tone" },
+  { value: "third", label: "3rds" },
+  { value: "root", label: "roots" },
+];
+
+export const targets = defineStep<{ aim: Aim }>({
+  id: "targets",
+  label: "Targets",
+  how: "One note per chord, on beat 1, held. Hear each chord arrive under it. “Nearest tone” moves least; 3rds say major or minor loudest.",
+  initial: { aim: "nearest" },
+  phrase: (ctx, sel) => overBars(ctx, `targets-${sel.aim}`, "Targets", (bars) => targetLines(bars, ctx.lo, sel.aim)),
+  Options: ({ ctx, sel, setSel }) => (
+    <Toggle options={AIMS} value={sel.aim} onPick={(aim) => {
+      setSel({ aim });
+      ctx.preview(targets.phrase(ctx, { aim }));
+    }} />
+  ),
+});
+
+// ---------- Chord tones ----------
+
 export const chordTones = defineStep<{ rhythm: Rhythm }>({
   id: "tones",
   label: "Chord tones",
-  how: "Play each chord's notes inside the position, starting where the last chord left off. The ringed note is where the next chord begins — the nearest one.",
+  how: "Climb and fall through each chord's notes inside the position, starting where the last chord left off. The ringed note is where the next chord begins.",
   initial: { rhythm: "quarters" },
-  phrase: (ctx, sel) => {
-    const lines = toneLines(barsOf_(ctx, null), ctx.lo, sel.rhythm);
-    const many = ctx.progression.length > 0;
-    return {
-      id: `tones-${sel.rhythm}`,
-      name: "Chord tones",
-      roles: true,
-      numbered: false,
-      notesFor: (chord, idx) => (many ? lines[idx % lines.length] : toneLines(barsOf_(ctx, chord), ctx.lo, sel.rhythm)[0]),
-      targetAfter: (idx) => (many && lines.length > 1 ? lines[(idx + 1) % lines.length].slice(0, 1) : []),
-    };
-  },
+  phrase: (ctx, sel) => overBars(ctx, `tones-${sel.rhythm}`, "Chord tones", (bars) => toneLines(bars, ctx.lo, sel.rhythm)),
   Options: ({ ctx, sel, setSel }) => (
     <Toggle options={RHYTHMS} value={sel.rhythm} onPick={(rhythm) => {
       setSel({ rhythm });
@@ -67,27 +96,37 @@ export const chordTones = defineStep<{ rhythm: Rhythm }>({
 
 // ---------- Shapes ----------
 
+const SETS = [{ value: ANY_STRINGS, label: "any strings" }, ...STRING_SETS.map((s) => ({ value: s.low, label: s.label }))];
+
 export const shapes = defineStep<{ low: number }>({
   id: "shapes",
   label: "Shapes",
-  how: "Each chord as three notes on three strings, the shape nearest the last one. Watch how little the hand moves between chords.",
-  initial: { low: 3 },
-  phrase: (ctx, sel) => {
-    const lines = shapeLines(barsOf_(ctx, null), sel.low, ctx.lo);
-    const many = ctx.progression.length > 0;
-    return {
-      id: `shapes-${sel.low}`,
-      name: "Shapes",
-      roles: true,
-      numbered: false,
-      notesFor: (chord, idx) => (many ? lines[idx % lines.length] : shapeLines(barsOf_(ctx, chord), sel.low, ctx.lo)[0]),
-      targetAfter: (idx) => (many && lines.length > 1 ? lines[(idx + 1) % lines.length].filter((x) => x.at === 0) : []),
-    };
-  },
+  how: "Each chord as a three-string triad inside the position, the one nearest the last. Watch how little the hand moves between chords.",
+  initial: { low: ANY_STRINGS },
+  phrase: (ctx, sel) => overBars(ctx, `shapes-${sel.low}`, "Shapes", (bars) => shapeLines(bars, sel.low, ctx.lo)),
   Options: ({ ctx, sel, setSel }) => (
-    <Toggle options={STRING_SETS.map((s) => ({ value: s.low, label: s.label }))} value={sel.low} onPick={(low) => {
+    <Toggle options={SETS} value={sel.low} onPick={(low) => {
       setSel({ low });
       ctx.preview(shapes.phrase(ctx, { low }));
+    }} />
+  ),
+});
+
+// ---------- Lines ----------
+
+export const lines = defineStep<{ rhythm: Rhythm }>({
+  id: "lines",
+  label: "Lines",
+  how: "Chord tones on the beat, then a scale step into the next chord's nearest note — the ringed one. This is what makes a solo follow the changes.",
+  initial: { rhythm: "quarters" },
+  phrase: (ctx, sel) => {
+    const scalePcs = ctx.scale.map((s) => (ctx.keyPc + s) % 12);
+    return overBars(ctx, `lines-${sel.rhythm}`, "Lines", (bars) => walkLines(bars, scalePcs, ctx.lo, sel.rhythm), true);
+  },
+  Options: ({ ctx, sel, setSel }) => (
+    <Toggle options={RHYTHMS} value={sel.rhythm} onPick={(rhythm) => {
+      setSel({ rhythm });
+      ctx.preview(lines.phrase(ctx, { rhythm }));
     }} />
   ),
 });
@@ -177,5 +216,8 @@ export const phrases = defineStep<{ id: string | null; move: boolean }>({
   },
 });
 
-/** The steps, in order: the ladder from chord notes to whole phrases. */
-export const STEPS = [chordTones, shapes, phrases];
+/**
+ * The steps, in order: the ladder from hearing each change land, through
+ * the chord's notes and shapes, to lines that join the chords, to whole phrases.
+ */
+export const STEPS = [targets, chordTones, shapes, lines, phrases];

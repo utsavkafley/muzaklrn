@@ -476,6 +476,46 @@ export default function Page() {
             </button>
           )}
         </div>
+
+        {/* The neck sits straight under the modes, so picking one shows it
+            at once. It breaks out of the page's column for room to breathe:
+            a phone gets it stood up so the dots stay finger-sized; anything
+            wider gets it lying down, scaled to fit. */}
+        {note && name && (
+          <div className="relative left-1/2 w-[min(calc(100vw-2rem),76rem)] -translate-x-1/2 space-y-3">
+            <div className="sm:hidden">
+              <Fretboard notes={dots} maxFret={MAX_FRET} vertical overlay={overlay}
+                onNoteHover={(n) => n && setHover(n)} onNoteClick={(n) => setHover(n)} />
+            </div>
+            <div className="hidden sm:block">
+              <Fretboard notes={dots} maxFret={MAX_FRET} fit overlay={overlay}
+                onNoteHover={(n) => setHover(n)} onNoteClick={(n) => setHover(n)} />
+            </div>
+            <NoteTip tip={tip} />
+          </div>
+        )}
+
+        {/* What the neck is showing you to play, right under it. */}
+        {practiceCtx && (
+          <Practice
+            ctx={practiceCtx}
+            onMove={(by) => {
+              // Kept so the window never runs off either end of the neck.
+              const home = homeFret(practiceCtx.keyPc) - 1;
+              setShift((x) => Math.max(-home, Math.min(11 - home, x + by)));
+            }}
+            canMove={{ down: lo > 0, up: lo < 11 }}
+            step={step}
+            setStep={setStep}
+            sels={sels}
+            setSel={(id, sel) => setSels({ ...sels, [id]: sel })}
+            yourTurn={yourTurn}
+            setYourTurn={setYourTurn}
+            canClimb={running}
+            onClimb={() => setBpmText(String(clampBpm(bpm + 5)))}
+          />
+        )}
+
         {circleOpen && note && name && scale && (
           <div className="rounded-2xl border border-neutral-200 bg-white p-4">
             <KeyCircle ctx={{
@@ -634,41 +674,6 @@ export default function Page() {
 
               </div>
             )}
-
-            {practiceCtx && (
-              <Practice
-                ctx={practiceCtx}
-                onMove={(by) => {
-                  // Kept so the window never runs off either end of the neck.
-                  const home = homeFret(noteIndex(note)) - 1;
-                  setShift((x) => Math.max(-home, Math.min(11 - home, x + by)));
-                }}
-                canMove={{ down: lo > 0, up: lo < 11 }}
-                step={step}
-                setStep={setStep}
-                sels={sels}
-                setSel={(id, sel) => setSels({ ...sels, [id]: sel })}
-                yourTurn={yourTurn}
-                setYourTurn={setYourTurn}
-                canClimb={running}
-                onClimb={() => setBpmText(String(clampBpm(bpm + 5)))}
-              />
-            )}
-
-            {/* The neck breaks out of the page's column for room to breathe.
-                A phone gets it stood up so the dots stay finger-sized;
-                anything wider gets it lying down, scaled to fit. */}
-            <div className="relative left-1/2 w-[min(calc(100vw-2rem),76rem)] -translate-x-1/2 space-y-3">
-              <div className="sm:hidden">
-                <Fretboard notes={dots} maxFret={MAX_FRET} vertical overlay={overlay}
-                  onNoteHover={(n) => n && setHover(n)} onNoteClick={(n) => setHover(n)} />
-              </div>
-              <div className="hidden sm:block">
-                <Fretboard notes={dots} maxFret={MAX_FRET} fit overlay={overlay}
-                  onNoteHover={(n) => setHover(n)} onNoteClick={(n) => setHover(n)} />
-              </div>
-              <NoteTip tip={tip} />
-            </div>
           </>
         )}
       </div>

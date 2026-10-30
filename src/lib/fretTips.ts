@@ -62,7 +62,8 @@ export function fretTip(string: number, fret: number, c: Ctx): FretTip {
   const iv = (pc - c.keyPc + 12) % 12;
   const inKey = iv === 0 || c.shown.includes(iv);
   const name = nameOf(iv, c);
-  const label = spelled(iv, c.shown).label;
+  // The tonic has no interval to spell; it gets its own title below.
+  const label = iv === 0 ? "1" : spelled(iv, c.shown).label;
   const mood = noteMood(iv, c.homeTones);
   const lines: string[] = [];
 
