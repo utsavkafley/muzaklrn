@@ -37,92 +37,6 @@ export function windowNotes(pcs: number[], lo: number): Spot[] {
 
 export type Rhythm = "quarters" | "eighths";
 
-/** Which chord tone a target aims for: the nearest of any, or always the 3rd or root. */
-export type Aim = "nearest" | "third" | "root";
-
-const nearestTo = (w: Spot[], midi: number) =>
-  w.reduce((b, x) => (Math.abs(x.midi - midi) < Math.abs(b.midi - midi) ? x : b));
-
-/**
- * The landing note of every segment: one chord tone each, the one nearest
- * the landing before it. Chained twice so the loop closes smoothly.
- */
-function landings(bars: Segment[][], lo: number, aim: Aim): Spot[][] {
-  const pick = (seg: Segment) =>
-    aim === "root" ? [seg.pcs[0]] : aim === "third" ? [seg.pcs[1] ?? seg.pcs[0]] : seg.pcs;
-  const run = (from: number | null) => {
-    let last = from;
-    const out = bars.map((segs) => segs.flatMap((seg) => {
-      const w = windowNotes(pick(seg), lo);
-      if (!w.length) return [];
-      // Start the first chord on its root, low in the hand; after that, move least.
-      const x = last === null ? (w.find((s) => s.pc === seg.pcs[0]) ?? w[0]) : nearestTo(w, last);
-      last = x.midi;
-      return [x];
-    }));
-    return { out, last };
-  };
-  return run(run(null).last).out;
-}
-
-/**
- * Targets: one note per chord, held, the smallest move from the one before.
- * Only the change itself to play — the place to hear a chord arrive.
- */
-export function targetLines(bars: Segment[][], lo: number, aim: Aim): RiffNote[][] {
-  return landings(bars, lo, aim).map((lands, b) => {
-    const span = 8 / Math.max(bars[b].length, 1);
-    return lands.map((x, k) => ({ at: k * span, len: span, string: x.string, fret: x.fret }));
-  });
-}
-
-/**
- * Lines that walk from chord to chord: each segment opens on its landing,
- * arcs through its own chord tones, and steps into the next landing from
- * the scale note beside it. Chord tones on the beat, a step on the way in —
- * the bones of every melodic solo over changes.
- */
-export function walkLines(bars: Segment[][], scalePcs: number[], lo: number, rhythm: Rhythm): RiffNote[][] {
-  const lands = landings(bars, lo, "nearest");
-  const flat = lands.flat();
-  const scale = windowNotes(scalePcs, lo);
-  const step = rhythm === "quarters" ? 2 : 1;
-  let n = 0;
-  return bars.map((segs, b) => {
-    const span = 8 / Math.max(segs.length, 1);
-    const notes: RiffNote[] = [];
-    segs.forEach((seg, k) => {
-      const from = lands[b][k];
-      if (!from) return;
-      const to = flat[(++n) % flat.length];
-      const slots = span / step;
-      const path: Spot[] = [from];
-      // The arc: the chord's own notes, heading where there is more room
-      // and turning at the edge of the hand.
-      const w = windowNotes(seg.pcs, lo);
-      let i = w.findIndex((x) => x.midi === from.midi);
-      let dir = i < w.length / 2 ? 1 : -1;
-      while (path.length < slots - 1 && w.length > 1) {
-        if (i + dir < 0 || i + dir >= w.length) dir = -dir;
-        i += dir;
-        path.push(w[i]);
-      }
-      if (slots > 1) {
-        // The way in: the scale note beside the next landing, on the side
-        // the arc ended, unless that is where the arc already is.
-        const last = path[path.length - 1];
-        const below = [...scale].reverse().find((x) => x.midi < to.midi);
-        const above = scale.find((x) => x.midi > to.midi);
-        const side = last.midi < to.midi ? [below, above] : [above, below];
-        const into = side.find((x) => x && x.midi !== last.midi && to.midi - x.midi <= 2 && x.midi - to.midi <= 2);
-        path.push(into ?? last);
-      }
-      path.forEach((x, j) => notes.push({ at: k * span + j * step, len: step, string: x.string, fret: x.fret }));
-    });
-    return notes;
-  });
-}
-
 /**
  * A chord-tone line for every bar: each segment walks up its chord's notes
  * (and turns at the top or bottom of the window), one per beat or two, and
@@ -145,7 +59,7 @@ export function toneLines(bars: Segment[][], lo: number, rhythm: Rhythm): RiffNo
         let dir = 1;
         for (let t = 0; t < span; t += step) {
           const x = w[i];
-          notes.push({ at: k * span + t, len: step, string: x.string, fret: x.fret });
+          notes.push({ at: k * span + t, len: step, string: x.string, fret: x.fret, label: roleLabel(x.pc - seg.pcs[0]) });
           last = x.midi;
           if (w.length > 1) {
             if (i + dir < 0 || i + dir >= w.length) dir = -dir;
@@ -199,12 +113,14 @@ export function shapeLines(bars: Segment[][], low: number, lo: number): RiffNote
   return placeShapes(bars, low, lo).map((shapes, b) => {
     const per = bars[b].length === 2 ? 1 : 2;
     return shapes.flatMap((sh, k) => (sh
-      ? Array.from({ length: per }, (_, r) => sh.frets.map((f, si) => ({ at: k * 4 + r * 4, len: 4, string: sh.s + si, fret: f }))).flat()
+      ? Array.from({ length: per }, (_, r) => sh.frets.map((f, si) => ({
+        at: k * 4 + r * 4, len: 4, string: sh.s + si, fret: f, label: roleLabel(pitchAt(sh.s + si, f) - bars[b][k].pcs[0]),
+      }))).flat()
       : []));
   });
 }
 
-/** A chord tone's role, by its interval above the chord's root: R, ♭3, 3, 5, ♭7… */
+/** A chord tone's role, by its interval above the chord's root: 1, ♭3, 3, 5, ♭7… */
 export function roleLabel(semisAboveRoot: number): string {
-  return ["R", "♭2", "2", "♭3", "3", "4", "♭5", "5", "♯5", "6", "♭7", "7"][((semisAboveRoot % 12) + 12) % 12];
+  return ["1", "♭2", "2", "♭3", "3", "4", "♭5", "5", "♯5", "6", "♭7", "7"][((semisAboveRoot % 12) + 12) % 12];
 }

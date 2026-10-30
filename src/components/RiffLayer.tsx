@@ -10,6 +10,14 @@ const INK = "#18181b";
 const BOARD = "#ffffff";
 const STRING = "#a8a29e";
 
+/**
+ * A note named by its interval in the chord takes its colour from that job:
+ * the chord's 1 black, the rest white. Anything else takes the neck's colour.
+ */
+const fillOf = (colorOf: (s: number, f: number) => string, x: { string: number; fret: number; label?: string }) =>
+  x.label === undefined ? colorOf(x.string, x.fret) : x.label === "1" ? INK : BOARD;
+const inkOn = (fill: string) => (fill === INK ? BOARD : INK);
+
 interface Props {
   geo: FretGeo;
   /** The phrase as it sits on the neck now: drawn as numbered ghosts. */
@@ -185,13 +193,14 @@ function Ghosts({ geo, notes, lands, faded, colorOf, outside, numbered }: {
         const label = orders.length > 3 ? `${orders[0]}…${orders[orders.length - 1]}` : orders.join("·");
         const w = Math.max(12, label.length * 5.6 + 6);
         const out = named ?? outside(s, f);
+        const fill = fillOf(colorOf, { string: s, fret: f, label: named });
         return (
           <g key={`${s}:${f}`}>
             {out && (
               <>
-                <circle cx={p.x} cy={p.y} r={R} fill={colorOf(s, f)} />
+                <circle cx={p.x} cy={p.y} r={R} fill={fill} />
                 <text x={p.x} y={p.y + R * 0.34} fontSize={R * 0.9} fontWeight={700} textAnchor="middle"
-                  fill={colorOf(s, f) === INK ? "#fff" : INK}>{out}</text>
+                  fill={inkOn(fill)}>{out}</text>
               </>
             )}
             <circle cx={p.x} cy={p.y} r={R + 3} fill="none" stroke={INK} strokeWidth={1.75} />
@@ -223,7 +232,7 @@ function Live({ geo, e, now, colorOf, part }: {
 
   let fret = e.fret;
   let bend = 0; // semitones the string is pushed
-  let fill = colorOf(e.string, e.fret);
+  let fill = fillOf(colorOf, e);
   if (e.tech === "slide" && e.to !== undefined) {
     fret = e.fret + (e.to - e.fret) * ease;
     fill = colorOf(e.string, Math.round(fret));
@@ -275,6 +284,9 @@ function Live({ geo, e, now, colorOf, part }: {
           opacity={0.6 * (1 - sinceStart / 0.28)} />
       )}
       <circle cx={p.x} cy={p.y} r={R * 1.2} fill={fill} stroke={INK} strokeWidth={2.5} />
+      {e.label && (
+        <text x={p.x} y={p.y + R * 0.38} fontSize={R} fontWeight={700} textAnchor="middle" fill={inkOn(fill)}>{e.label}</text>
+      )}
       {/* Where a slide or bend is headed, kept in view as it travels. */}
       {e.to !== undefined && (e.tech === "slide" || e.tech === "bend") && prog < 1 && (
         <circle {...xy(pos(e.string, e.to))} r={R + 3} fill="none" stroke={INK} strokeWidth={1.5} strokeDasharray="2 2" />

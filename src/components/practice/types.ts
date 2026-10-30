@@ -1,5 +1,5 @@
 // The contract the practice steps plug into. A step is a way of playing over
-// the progression — chord tones, shapes, phrases — with its own few options,
+// the progression — chord tones, triads, intervals — with its own few options,
 // and the phrase it puts on the neck. The shared player sounds and animates
 // it, bar by bar, and trades bars with you on "your turn".
 

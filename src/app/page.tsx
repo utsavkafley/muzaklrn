@@ -24,7 +24,6 @@ import { barOf, usePhrasePlayer } from "@/lib/usePhrasePlayer";
 import Practice from "@/components/practice/Practice";
 import { STEPS } from "@/components/practice/steps";
 import { Phrase, PracticeCtx } from "@/components/practice/types";
-import { roleLabel } from "@/lib/lines";
 import { homeFret } from "@/lib/shapes";
 
 const MAX_FRET = 15;
@@ -65,7 +64,7 @@ export default function Page() {
   const chords = useMemo(() => (name ? diatonicChords(name, shown, kind) : null), [name, shown, kind]);
   const chordOf = (ref: ChordRef) => buildOrTriad(name!, scale!, ref);
 
-  // ---- practice: chord tones, shapes, phrases, in one hand position ----
+  // ---- practice: chord tones, triads, intervals, in one hand position ----
   const [step, setStep] = useState(STEPS[0].id);
   /** Each step's own options, kept when you switch steps. */
   const [sels, setSels] = useState<Record<string, unknown>>({});
@@ -377,7 +376,7 @@ export default function Page() {
   const phraseBars = barsOf(phraseNotes);
   const hitsByPart = Array.from({ length: phraseBars }, (_, k) =>
     phraseNotes.filter((x) => x.at >= k * 8 && x.at < k * 8 + 8).map((x) => x.at - k * 8));
-  const dots: FbNote[] = note && name ? neckDots(note, name, shown, homeTones, chord, hoverPc, !!phrase?.roles) : [];
+  const dots: FbNote[] = note && name ? neckDots(note, name, shown, homeTones, chord, hoverPc, !!phrase) : [];
 
   useEffect(() => {
     phraseCfg.current = { phrase, yourTurn };
@@ -483,9 +482,11 @@ export default function Page() {
               <Fretboard notes={dots} maxFret={MAX_FRET} fit overlay={overlay}
                 onNoteHover={(n) => setHover(n)} onNoteClick={(n) => setHover(n)} />
             </div>
-            <NoteTip tip={tip} at={pointer} onClose={() => setHover(null)} />
           </div>
         )}
+        {/* Outside the neck's wrapper: its transform would trap a fixed card
+            inside it, and under whatever comes after it on the page. */}
+        <NoteTip tip={tip} at={pointer} onClose={() => setHover(null)} />
 
         {/* What the neck is showing you to play, right under it. */}
         {practiceCtx && (
@@ -684,16 +685,17 @@ function nextEmpty(bars: Bar[], from: number): number | null {
 
 /**
  * The key's root and every interval switched on, each coloured by its own
- * mood. With a chord in play the key stays on the neck, paled, and the
- * chord's notes stand out over it as diamonds, its root ringed.
+ * mood. With a chord in play the chord's notes stand out as diamonds over
+ * the paled key, its root ringed. The tonic is the one fixed point: always a
+ * black circle.
  *
- * The tonic is the one fixed point: always a black circle, whatever plays.
- * When it belongs to the chord it gains a ring in home's colour instead of
- * turning into a diamond.
+ * While a practice step is showing its notes, the neck steps back: the key
+ * is faint, unlabelled dots — the map — and only the step's own notes,
+ * drawn over it, are named.
  */
 function neckDots(
   key: NoteName, keyName: string, shown: number[], homeTones: number[], chord: DiatonicChord | null,
-  hoverPc: number | null, roles: boolean,
+  hoverPc: number | null, quiet: boolean,
 ): FbNote[] {
   const on = shown.map((s) => spelled(s, shown));
   const semis = [0, ...on.map((iv) => iv.semis)];
@@ -703,16 +705,13 @@ function neckDots(
     const mood = noteMood(iv, homeTones);
     // Every copy of the note being looked at is ringed: that's the map.
     const base = { string: n.string, fret: n.fret, label: n.degree, halo: n.pc === hoverPc };
-    // Practising over chords, a chord's notes are named by their job in it.
-    const role = roles && chord && chord.tones.includes(iv) ? roleLabel(iv - chord.semis) : null;
+    if (quiet) return { ...base, label: "", fill: iv === 0 ? INK : MOOD_TINT[mood], dim: true };
     if (iv === 0) {
-      return { ...base, label: role ?? base.label, fill: INK, ring: chord?.tones.includes(0) ? MOOD_FILL.home : undefined };
+      return { ...base, fill: INK, ring: chord?.tones.includes(0) ? MOOD_FILL.home : undefined };
     }
     if (!chord) return { ...base, fill: MOOD_FILL[mood] };
-    // Named by role, a chord's notes would be muddled by degree numbers on
-    // the rest of the key: those stay pale and quiet.
-    if (!chord.tones.includes(iv)) return { ...base, label: roles ? "" : base.label, fill: MOOD_TINT[mood] };
-    return { ...base, label: role ?? base.label, fill: MOOD_FILL[mood], shape: "diamond" as const, ring: iv === chord.semis ? INK : undefined };
+    if (!chord.tones.includes(iv)) return { ...base, fill: MOOD_TINT[mood] };
+    return { ...base, fill: MOOD_FILL[mood], shape: "diamond" as const, ring: iv === chord.semis ? INK : undefined };
   });
 }
 

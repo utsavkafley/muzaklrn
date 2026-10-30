@@ -26,8 +26,8 @@ interface Props {
 
 /**
  * Playing over the progression, one hand position at a time. Pick where on
- * the neck to play, then a step of the ladder — chord tones, shapes,
- * phrases — and press space.
+ * the neck to play, then a step — chord tones, triads, intervals — and
+ * press space.
  */
 export default function Practice({
   ctx, onMove, canMove, step, setStep, sels, setSel, yourTurn, setYourTurn, canClimb, onClimb,
