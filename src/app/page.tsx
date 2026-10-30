@@ -9,7 +9,7 @@ import RiffLayer from "@/components/RiffLayer";
 import { HandBoard, HandFrame } from "@/components/HandWindow";
 import { Metronome, Voice, audioCtx, click, pluck, sticks } from "@/lib/audio";
 import { MODES } from "@/lib/modes";
-import { NoteName, fretNotesFor, noteIndex, parseNote, pitchAt, spellInterval, spellNote } from "@/lib/theory";
+import { NoteName, fretNotesFor, midiAt, noteIndex, parseNote, pitchAt, spellInterval, spellNote } from "@/lib/theory";
 import {
   ChordKind, ChordRef, DiatonicChord, INTERVALS, KINDS, MOOD_FILL, MOOD_TINT, Mood,
   buildOrTriad, diatonicChords, noteMood, scaleOf, spelled, variantsOf, voicing,
@@ -401,7 +401,8 @@ export default function Page() {
   const phraseBars = barsOf(phraseNotes);
   const hitsByPart = Array.from({ length: phraseBars }, (_, k) =>
     phraseNotes.filter((x) => x.at >= k * 8 && x.at < k * 8 + 8).map((x) => x.at - k * 8));
-  const dots: FbNote[] = note && name ? neckDots(note, name, shown, homeTones, chord, hoverPc, !!phrase) : [];
+  // A bare phrase (the drill) hides the key's own dots: they'd give the answer away.
+  const dots: FbNote[] = note && name && !phrase?.bare ? neckDots(note, name, shown, homeTones, chord, hoverPc, !!phrase) : [];
 
   useEffect(() => {
     phraseCfg.current = { phrase, yourTurn };
@@ -421,8 +422,16 @@ export default function Page() {
     : undefined;
   // The hand window, grabbed on the board under the notes.
   const home = note ? homeFret(noteIndex(note)) - 1 : 0;
+  // While the step is drilling, a tap on the neck is an answer, sounded.
+  const tapStep = practiceCtx && practiceStep.tap && phrase?.bare
+    ? (string: number, fret: number) => {
+      pluck(midiAt(string, fret));
+      const next = practiceStep.tap!(practiceCtx, sels[step] ?? practiceStep.initial, { string, fret });
+      if (next !== undefined) setSels({ ...sels, [step]: next });
+    }
+    : undefined;
   const underlay = practiceCtx
-    ? (geo: FretGeo) => <HandBoard geo={geo} lo={lo} maxLo={11} onLo={(n) => setShift(n - home)} />
+    ? (geo: FretGeo) => <HandBoard geo={geo} lo={lo} maxLo={11} onLo={(n) => setShift(n - home)} onTap={tapStep} />
     : undefined;
 
   return (
@@ -522,20 +531,12 @@ export default function Page() {
         {practiceCtx && (
           <Practice
             ctx={practiceCtx}
-            onMove={(by) => {
-              // Kept so the window never runs off either end of the neck.
-              const home = homeFret(practiceCtx.keyPc) - 1;
-              setShift((x) => Math.max(-home, Math.min(11 - home, x + by)));
-            }}
-            canMove={{ down: lo > 0, up: lo < 11 }}
             step={step}
             setStep={setStep}
             sels={sels}
             setSel={(id, sel) => setSels({ ...sels, [id]: sel })}
             yourTurn={yourTurn}
             setYourTurn={setYourTurn}
-            canClimb={running}
-            onClimb={() => setBpmText(String(clampBpm(bpm + 5)))}
           />
         )}
 

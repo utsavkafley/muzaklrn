@@ -1,17 +1,10 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import {
-  INSTRUMENTS, currentInstrument, instrumentServerSnapshot, setInstrument, subscribeInstrument,
-} from "@/lib/instruments";
 import { STEPS } from "./steps";
 import { PracticeCtx } from "./types";
 
 interface Props {
   ctx: PracticeCtx;
-  /** Move the hand position by `by` frets. */
-  onMove: (by: number) => void;
-  canMove: { down: boolean; up: boolean };
   step: string;
   setStep: (id: string) => void;
   sels: Record<string, unknown>;
@@ -19,83 +12,39 @@ interface Props {
   /** Trade bars: the app plays one, you answer the next. */
   yourTurn: boolean;
   setYourTurn: (on: boolean) => void;
-  /** Running: offer the tempo step. */
-  canClimb: boolean;
-  onClimb: () => void;
 }
 
 /**
- * Playing over the progression, one hand position at a time. Pick where on
- * the neck to play, then a step — chord tones, triads, intervals — and
+ * Playing over the progression where the hand is — the frame on the neck,
+ * dragged to move it. Pick a step — chord tones, triads, intervals — and
  * press space.
  */
-export default function Practice({
-  ctx, onMove, canMove, step, setStep, sels, setSel, yourTurn, setYourTurn, canClimb, onClimb,
-}: Props) {
+export default function Practice({ ctx, step, setStep, sels, setSel, yourTurn, setYourTurn }: Props) {
   const current = STEPS.find((s) => s.id === step) ?? STEPS[0];
-  const sound = useSyncExternalStore(subscribeInstrument, currentInstrument, instrumentServerSnapshot);
   const Options = current.Options;
   return (
-    <section className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-3 sm:p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Where the hand is. The frame on the neck drags; these step it two
-            frets at a time, walking the neck box by box. */}
-        <div className="flex items-center gap-1 text-sm text-neutral-600">
-          <button onClick={() => onMove(-2)} disabled={!canMove.down} aria-label="move position down the neck"
-            className="h-8 w-8 rounded-full text-lg hover:bg-neutral-100 disabled:opacity-30">‹</button>
-          <span className="tabular-nums" title="Drag the frame on the neck, or click where you want the hand">
-            Position <b className="text-neutral-900">frets {ctx.lo}–{ctx.lo + 4}</b>
-          </span>
-          <button onClick={() => onMove(2)} disabled={!canMove.up} aria-label="move position up the neck"
-            className="h-8 w-8 rounded-full text-lg hover:bg-neutral-100 disabled:opacity-30">›</button>
-        </div>
-
+    <section className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-3 sm:p-4">
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
         <div role="tablist" className="flex gap-1">
-          {STEPS.map((s, i) => (
+          {STEPS.map((s) => (
             <button key={s.id} role="tab" aria-selected={s.id === current.id} onClick={() => setStep(s.id)}
               className={`whitespace-nowrap rounded-full px-3 py-1 text-sm transition-colors ${
                 s.id === current.id ? "bg-neutral-800 text-neutral-50" : "text-neutral-500 hover:text-neutral-800"
               }`}>
-              <span className="mr-1 text-xs opacity-60">{i + 1}</span>{s.label}
+              {s.label}
             </button>
           ))}
         </div>
-
-        <div className="flex items-center gap-2 text-sm">
-          <label className="flex items-center gap-1.5 text-neutral-600">
-            <input type="checkbox" checked={yourTurn} onChange={(e) => setYourTurn(e.target.checked)} className="accent-neutral-800" />
-            your turn
-          </label>
-          {canClimb && (
-            <button onClick={onClimb}
-              className="rounded-full border border-neutral-300 px-3 py-1 text-neutral-700 hover:border-neutral-500">
-              ✓ clean · +5 bpm
-            </button>
-          )}
-        </div>
+        <label className="flex items-center gap-1.5 text-sm text-neutral-500"
+          title="The app plays a bar, you answer the next">
+          <input type="checkbox" checked={yourTurn} onChange={(e) => setYourTurn(e.target.checked)} className="accent-neutral-800" />
+          your turn
+        </label>
       </div>
 
       <Options ctx={ctx} sel={sels[current.id] ?? current.initial} setSel={(s) => setSel(current.id, s)} />
 
-      {/* What the phrase is played on. Picking one plays the phrase in it. */}
-      <div className="flex flex-wrap items-center justify-center gap-1 text-sm">
-        <span className="mr-1 text-xs text-neutral-400">sound</span>
-        {INSTRUMENTS.map((x) => (
-          <button key={x.id} aria-pressed={sound === x.id}
-            onClick={() => {
-              setInstrument(x.id);
-              ctx.preview(current.phrase(ctx, sels[current.id] ?? current.initial));
-            }}
-            className={`rounded-full border px-3 py-0.5 transition-colors ${
-              sound === x.id ? "border-neutral-800 bg-neutral-800 text-neutral-50" : "border-neutral-200 text-neutral-500 hover:border-neutral-400 hover:text-neutral-800"
-            }`}>
-            {x.label}
-          </button>
-        ))}
-      </div>
-      <p className="text-center text-xs leading-relaxed text-neutral-500">
-        {current.how} <span className="text-neutral-400">Space plays and pauses; “your turn” leaves every other bar to you.</span>
-      </p>
+      <p className="text-center text-xs leading-relaxed text-neutral-500">{current.how}</p>
     </section>
   );
 }

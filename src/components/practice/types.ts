@@ -26,6 +26,8 @@ export interface Phrase {
   notesFor: (chord: DiatonicChord | null, idx: number) => RiffNote[];
   /** Where the bar after `idx` begins: the landing to aim for. */
   targetAfter?: (idx: number) => RiffNote[];
+  /** Only the phrase on the neck: the key's own dots hidden, so they give nothing away. */
+  bare?: boolean;
   /** The triad compass for bar `idx`: triad notes the chord moved off, and the reaches from them. */
   compassFor?: (idx: number) => { ghosts: Ghost[]; reaches: Reach[] };
 }
@@ -65,6 +67,8 @@ export interface Step<S> {
   initial: S;
   Options: (p: OptionsProps<S>) => React.ReactNode;
   phrase: (ctx: PracticeCtx, sel: S) => Phrase | null;
+  /** A tap on the neck while the phrase is bare: the step's options after it, or undefined to ignore it. */
+  tap?: (ctx: PracticeCtx, sel: S, at: { string: number; fret: number }) => S | undefined;
 }
 
 /** Erase a step's option type so steps of every kind share one list. */

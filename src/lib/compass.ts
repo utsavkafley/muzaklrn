@@ -22,6 +22,23 @@ const REACH: { from: 0 | 4 | 7; by: number }[] = [
   { from: 7, by: 1 }, { from: 7, by: 2 }, { from: 0, by: -2 }, { from: 0, by: -1 },
 ];
 
+/** Where an interval sits, in words: "two frets under the 1". The 1, 3 and 5 are the triad itself. */
+export function reachWords(semis: number): string {
+  const { from, by } = REACH[semis];
+  const member = from === 0 ? "1" : from === 4 ? "3" : "5";
+  if (by === 0) return `the triad's ${member}`;
+  return `${Math.abs(by) === 1 ? "one fret" : "two frets"} ${by > 0 ? "over" : "under"} the ${member}`;
+}
+
+/** Where an interval sits on the neck, from a placed major triad shape on root `r`: on its triad note's string. */
+export function reachSpot(sh: Placed, r: number, semis: number): { string: number; fret: number; from: { string: number; fret: number } } {
+  const { from, by } = REACH[semis];
+  const si = sh.frets.findIndex((fr, i) => pitchAt(sh.s + i, fr) === (r + from) % 12);
+  const anchor = { string: sh.s + si, fret: sh.frets[si] };
+  const fret = anchor.fret + by;
+  return { string: anchor.string, fret: fret < 0 ? fret + 12 : fret, from: anchor };
+}
+
 /** How far a chord is dressed: as it stands, with its 6th, or stacked to the 7th, 9th or 11th. */
 export type Dress = "chord" | "6" | "7" | "9" | "11";
 
@@ -40,7 +57,7 @@ export interface Formula {
   aim: Tone;
 }
 
-const LOW = ["1", "♭2", "2", "♭3", "3", "4", "♭5", "5", "♯5", "6", "♭7", "7"];
+export const LOW = ["1", "♭2", "2", "♭3", "3", "4", "♭5", "5", "♯5", "6", "♭7", "7"];
 /** Above the 7th, the 2, 4 and 6 are named an octave up. */
 const HIGH: Record<number, string> = { 1: "♭9", 2: "9", 3: "♯9", 5: "11", 6: "♯11", 8: "♭13", 9: "13" };
 

@@ -3,8 +3,8 @@
 import { useRef, useState } from "react";
 import type { BarClock } from "@/components/BeatLine";
 import type { Phrase } from "@/components/practice/types";
-import { Glide, Voice, riffNote, synthNote } from "./audio";
-import { currentInstrument, specOf } from "./instruments";
+import { Glide, Voice, synthNote } from "./audio";
+import { MELLOTRON } from "./instruments";
 import { audioCtx } from "./audio";
 import { RiffEvent, RiffNote, barsOf, midiOf, moveWindow, timeline } from "./riffs";
 
@@ -15,8 +15,6 @@ import { RiffEvent, RiffNote, barsOf, midiOf, moveWindow, timeline } from "./rif
  */
 export function playBar(notes: RiffNote[], barStart: number, secPerEighth: number, voices: Voice[]): RiffEvent[] {
   const evs = timeline(notes, barStart, secPerEighth);
-  // The chosen voice, read as each bar is laid down: a change lands on the next bar.
-  const spec = specOf(currentInstrument());
   const ringing: Record<number, Voice> = {};
   for (const e of evs) {
     ringing[e.string]?.stop(e.start);
@@ -37,7 +35,7 @@ export function playBar(notes: RiffNote[], barStart: number, secPerEighth: numbe
       picked: e.tech !== "hammer" && e.tech !== "pull" && e.tech !== "release",
       vibrato: e.tech === "vibrato",
     };
-    const v = spec ? synthNote(spec, note) : riffNote(note);
+    const v = synthNote(MELLOTRON, note);
     voices.push(v);
     ringing[e.string] = v;
   }

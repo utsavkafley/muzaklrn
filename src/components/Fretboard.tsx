@@ -54,7 +54,18 @@ export interface FretGeo {
   /** x/y of the dot for string `s`, fret `f` (fractional frets slide). */
   pos: (s: number, f: number) => { x: number; y: number };
   /** The fret under a pointer event on the neck, fractional: 7 is fret 7's middle. */
-  fretAt: (e: { clientX: number; clientY: number; currentTarget: Element }) => number;
+  fretAt: (e: PointerAt) => number;
+  /** The string under a pointer event on the neck, fractional: 0 is low E. */
+  stringAt: (e: PointerAt) => number;
+}
+
+/** Enough of a pointer event to find where on the neck it landed. */
+interface PointerAt { clientX: number; clientY: number; currentTarget: Element }
+
+/** A pointer event's point in the neck's own drawing units. */
+function local(e: PointerAt) {
+  const m = (e.currentTarget.closest("svg") as SVGSVGElement | null)?.getScreenCTM();
+  return m ? new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse()) : null;
 }
 
 const INLAYS = [3, 5, 7, 9, 12, 15, 17, 19, 21];
@@ -123,10 +134,12 @@ export default function Fretboard({
     vertical, R, fretL, stringGap, maxFret, at, across, fretLine, fretMid,
     pos: (s, f) => at(fretMid(f), across(s)),
     fretAt: (e) => {
-      const m = (e.currentTarget.closest("svg") as SVGSVGElement | null)?.getScreenCTM();
-      if (!m) return 0;
-      const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
-      return ((vertical ? p.y : p.x) - nut) / fretL + 0.5;
+      const p = local(e);
+      return p ? ((vertical ? p.y : p.x) - nut) / fretL + 0.5 : 0;
+    },
+    stringAt: (e) => {
+      const p = local(e);
+      return p ? ((vertical ? p.x : p.y) - across(0)) / (across(1) - across(0)) : 0;
     },
   };
 

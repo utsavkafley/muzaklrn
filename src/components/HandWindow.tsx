@@ -13,6 +13,8 @@ interface Props {
   lo: number;
   maxLo: number;
   onLo: (lo: number) => void;
+  /** While set, every tap on the board is an answer: the string and fret it landed on. The hand stays put. */
+  onTap?: (string: number, fret: number) => void;
 }
 
 /** The window's rectangle on the neck, in x/y, open strings included at the nut. */
@@ -29,13 +31,22 @@ function box(geo: FretGeo, lo: number) {
  * the board anywhere else to put the hand there. On a touch screen only
  * the window itself drags, so the rest of the neck still scrolls the page.
  */
-export function HandBoard({ geo, lo, maxLo, onLo }: Props) {
+export function HandBoard({ geo, lo, maxLo, onLo, onTap }: Props) {
   const drag = useRef<{ offset: number; id: number } | null>(null);
   const clamp = (n: number) => Math.max(0, Math.min(maxLo, Math.round(n)));
   const all = box(geo, 0);
   const whole = { ...all, ...(geo.vertical
     ? { height: geo.fretLine(geo.maxFret) - all.y }
     : { width: geo.fretLine(geo.maxFret) - all.x }) };
+  if (onTap) {
+    return (
+      <rect {...whole} fill="transparent" className="cursor-crosshair"
+        onPointerDown={(e) => onTap(
+          Math.max(0, Math.min(5, Math.round(geo.stringAt(e)))),
+          Math.max(0, Math.min(geo.maxFret, Math.round(geo.fretAt(e)))),
+        )} />
+    );
+  }
   return (
     <g>
       <rect {...whole} fill="transparent"

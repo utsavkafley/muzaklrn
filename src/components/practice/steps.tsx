@@ -1,8 +1,9 @@
-import { Dress, compassLines, formulaOf } from "@/lib/compass";
+import { LOW, compassLines, formulaOf, reachSpot, reachWords } from "@/lib/compass";
 import { DiatonicChord } from "@/lib/harmony";
 import { ANY_STRINGS, NEAREST, Placed, Rhythm, Segment, placeShapes, shapeLines, shapeOrder, toneLines } from "@/lib/lines";
 import { RiffNote } from "@/lib/riffs";
 import { STRING_SETS } from "@/lib/shapes";
+import { pitchAt } from "@/lib/theory";
 import { Phrase, PracticeCtx, defineStep } from "./types";
 
 /** A chord as a segment: its pitch classes in this key, root first, each named as the chord names it. */
@@ -63,7 +64,7 @@ const RHYTHMS: { value: Rhythm; label: string }[] = [
 export const chordTones = defineStep<{ rhythm: Rhythm }>({
   id: "tones",
   label: "Chord tones",
-  how: "Climb and fall through each chord's notes inside the position, starting where the last chord left off. The ringed note is where the next chord begins.",
+  how: "Each chord's notes inside the frame, starting where the last chord left off. The ringed note is where the next chord begins.",
   initial: { rhythm: "quarters" },
   phrase: (ctx, sel) => overBars(ctx, `tones-${sel.rhythm}`, "Chord tones", (bars) => toneLines(bars, ctx.lo, sel.rhythm)),
   Options: ({ ctx, sel, setSel }) => (
@@ -118,7 +119,7 @@ function ShapeName({ seg, placed }: { seg: Segment | undefined; placed: Placed |
 export const shapes = defineStep<ShapeSel>({
   id: "shapes",
   label: "Triads",
-  how: "Each chord as a three-string triad inside the position, the one nearest the last — watch how little the hand moves. Pick a lowest note to fix one shape and learn it chord after chord.",
+  how: "Each chord as a three-string triad inside the frame. Nearest barely moves the hand; a lowest note fixes one shape to learn.",
   initial: { low: ANY_STRINGS, bottom: NEAREST },
   phrase: (ctx, sel) => overBars(ctx, `shapes-${sel.low}-${sel.bottom}`, "Shapes", (bars) => shapeLines(bars, sel.low, ctx.lo, sel.bottom)),
   Options: ({ ctx, sel, setSel }) => {
@@ -139,35 +140,95 @@ export const shapes = defineStep<ShapeSel>({
 
 // ---------- Intervals ----------
 
-const DRESSES: { value: Dress; label: string }[] = [
-  { value: "chord", label: "as played" },
-  { value: "6", label: "6" },
-  { value: "7", label: "7" },
-  { value: "9", label: "9" },
-  { value: "11", label: "11" },
-];
-
 /** Every bar's compass, or — with no progression — the chord in focus (else I) alone. */
-const compassBars = (ctx: PracticeCtx, sel: IntervalSel, alone: DiatonicChord | null) =>
+const compassBars = (ctx: PracticeCtx, sel: ShapeSel, alone: DiatonicChord | null) =>
   compassLines(
     ctx.progression.length ? ctx.progression : [[alone ?? ctx.focus ?? ctx.chordOf({ degree: 0, kind: ctx.kind })]],
-    ctx.keyPc, ctx.scale, ctx.lo, sel.dress, sel.low, sel.bottom,
+    ctx.keyPc, ctx.scale, ctx.lo, "chord", sel.low, sel.bottom,
   );
 
-interface IntervalSel extends ShapeSel { dress: Dress }
+/** The chord on the neck, and its root's pitch class. */
+const onShow = (ctx: PracticeCtx) => {
+  const chord = ctx.focus ?? ctx.chordOf({ degree: 0, kind: ctx.kind });
+  return { chord, root: (ctx.keyPc + chord.semis) % 12 };
+};
+
+/**
+ * The drill: the triad is on the neck, one interval is named, you tap
+ * where it is. Asked from the chord's own colour notes (its ♭3, ♭7, 9…) or
+ * from any interval at all.
+ */
+interface Quiz {
+  pool: "chord" | "any";
+  /** The interval asked for, in semitones above the root. */
+  ask: number;
+  /** Where you tapped, once you have. */
+  tapped: { string: number; fret: number } | null;
+  right: number;
+  asked: number;
+}
+
+interface IntervalSel extends ShapeSel { quiz: Quiz | null }
+
+/** Every interval that isn't the major triad itself: each one a reach from it. */
+const REACHES = [1, 2, 3, 5, 6, 8, 9, 10, 11];
+
+/** The chord's own name for an interval (its 9, its 11), else the plain one. */
+const nameOf = (ctx: PracticeCtx, semis: number) =>
+  formulaOf(onShow(ctx).chord, ctx.scale, "chord").tones.find((t) => t.semis === semis)?.label ?? LOW[semis];
+
+/** The next interval to ask for: a different one from the last, from the pool. */
+function nextAsk(ctx: PracticeCtx, pool: Quiz["pool"], last: number | null): number {
+  const colour = formulaOf(onShow(ctx).chord, ctx.scale, "chord").tones.map((t) => t.semis).filter((x) => REACHES.includes(x));
+  const from = pool === "chord" && colour.length ? colour : REACHES;
+  const fresh = from.length > 1 ? from.filter((x) => x !== last) : from;
+  return fresh[Math.floor(Math.random() * fresh.length)];
+}
+
+const MODES = [{ value: "watch", label: "watch" }, { value: "find", label: "find it" }];
+const POOLS: { value: Quiz["pool"]; label: string }[] = [
+  { value: "chord", label: "its notes" },
+  { value: "any", label: "any interval" },
+];
 
 export const intervals = defineStep<IntervalSel>({
   id: "intervals",
   label: "Intervals",
-  how: "Find the major triad on the chord's root, then reach: ♭7 and 7 sit just under the 1, 9 just over it; ♭3 one fret under the 3, 11 one over; 6 two over the 5. Play up the chord and land on the note that names it.",
+  how: "Find the major triad on the chord's root, then reach a fret or two: twos and sevens around the 1, the ♭3 and 4 around the 3, sixes around the 5.",
   // His first shape: the 1 3 5 on the D, G and B strings, out of the E-shape barre.
-  initial: { dress: "chord", low: 2, bottom: NEAREST },
+  initial: { low: 2, bottom: NEAREST, quiz: null },
   phrase: (ctx, sel) => {
     const bars = compassBars(ctx, sel, null);
     const many = ctx.progression.length > 0;
     const at = (chord: DiatonicChord | null, idx: number) => (many ? bars[idx % bars.length] : compassBars(ctx, sel, chord)[0]);
+    const q = sel.quiz;
+    if (q) {
+      // The drill: only the triad, until you answer; then where you tapped,
+      // and — if that wasn't it — where it is, reached from the triad.
+      const sh = at(ctx.focus, ctx.bar).shapes[0];
+      const { root } = onShow(ctx);
+      const notes: RiffNote[] = sh
+        ? sh.frets.map((f, i) => ({ at: i * 2, len: 2, string: sh.s + i, fret: f, label: LOW[(pitchAt(sh.s + i, f) - root + 12) % 12] }))
+        : [];
+      let reaches: { from: { string: number; fret: number }; to: { string: number; fret: number } }[] = [];
+      if (q.tapped && sh) {
+        const spot = reachSpot(sh, root, q.ask);
+        const got = (pitchAt(q.tapped.string, q.tapped.fret) - root + 12) % 12;
+        notes.push({ at: 6, len: 2, ...q.tapped, label: got === q.ask ? nameOf(ctx, q.ask) : LOW[got] });
+        if (got !== q.ask) notes.push({ at: 6, len: 2, string: spot.string, fret: spot.fret, label: nameOf(ctx, q.ask) });
+        reaches = [{ from: spot.from, to: spot }];
+      }
+      return {
+        id: `find-${sel.low}-${sel.bottom}-${q.ask}-${q.tapped ? "a" : "q"}`,
+        name: "Find it",
+        bare: true,
+        numbered: false,
+        notesFor: () => notes,
+        compassFor: () => ({ ghosts: [], reaches }),
+      };
+    }
     return {
-      id: `intervals-${sel.dress}-${sel.low}-${sel.bottom}`,
+      id: `intervals-${sel.low}-${sel.bottom}`,
       name: "Intervals",
       numbered: true,
       lands: true,
@@ -176,35 +237,73 @@ export const intervals = defineStep<IntervalSel>({
       compassFor: (idx) => at(ctx.focus, idx),
     };
   },
+  tap: (ctx, sel, at) => {
+    const q = sel.quiz;
+    if (!q) return undefined;
+    // Answered: the next tap moves on.
+    if (q.tapped) return { ...sel, quiz: { ...q, ask: nextAsk(ctx, q.pool, q.ask), tapped: null } };
+    const right = (pitchAt(at.string, at.fret) - onShow(ctx).root + 12) % 12 === q.ask;
+    return { ...sel, quiz: { ...q, tapped: at, asked: q.asked + 1, right: q.right + (right ? 1 : 0) } };
+  },
   Options: ({ ctx, sel, setSel }) => {
-    const chord = ctx.focus ?? ctx.chordOf({ degree: 0, kind: ctx.kind });
-    const f = formulaOf(chord, ctx.scale, sel.dress);
-    // The shape found first: the major triad on the chord's root, named 1 3 5.
+    const { chord, root } = onShow(ctx);
+    const f = formulaOf(chord, ctx.scale, "chord");
     const bars = compassBars(ctx, sel, null);
     const placed = bars[ctx.bar % bars.length]?.shapes[0];
-    const r = (ctx.keyPc + chord.semis) % 12;
-    const major: Segment = { pcs: [r, (r + 4) % 12, (r + 7) % 12] };
+    const major: Segment = { pcs: [root, (root + 4) % 12, (root + 7) % 12] };
+    const q = sel.quiz;
+    const pickShape = (next: ShapeSel) => {
+      const s = { ...sel, ...next };
+      setSel(s);
+      if (!q) ctx.preview(intervals.phrase(ctx, s));
+    };
+    const start = (pool: Quiz["pool"]) =>
+      setSel({ ...sel, quiz: { pool, ask: nextAsk(ctx, pool, null), tapped: null, right: q?.right ?? 0, asked: q?.asked ?? 0 } });
+    const got = q?.tapped ? (pitchAt(q.tapped.string, q.tapped.fret) - root + 12) % 12 : null;
     return (
       <div className="space-y-2">
-        <Toggle options={DRESSES} value={sel.dress} onPick={(dress) => {
-          setSel({ ...sel, dress });
-          ctx.preview(intervals.phrase(ctx, { ...sel, dress }));
-        }} />
-        <ShapePicker sel={sel} onPick={(next) => {
-          setSel({ ...sel, ...next });
-          ctx.preview(intervals.phrase(ctx, { ...sel, ...next }));
-        }} />
-        {/* The chord in focus as its formula, and the note that names it. */}
-        <p className="text-center text-sm text-neutral-600">
-          <b className="text-neutral-900">{f.name}</b>
-          <span className="mx-2 text-neutral-300">=</span>
-          {f.tones.map((t) => (
-            <span key={t.semis} className={`mx-0.5 inline-block min-w-6 rounded-md px-1 tabular-nums ${
-              t === f.aim ? "bg-neutral-800 font-bold text-neutral-50" : "bg-neutral-100"}`}>{t.label}</span>
-          ))}
-          <span className="ml-2 text-xs text-neutral-400">land on the {f.aim.label}</span>
-        </p>
-        <ShapeName seg={major} placed={placed} />
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+          <Toggle options={MODES} value={q ? "find" : "watch"} onPick={(m) => (m === "find" ? start("chord") : setSel({ ...sel, quiz: null }))} />
+          <span aria-hidden className="h-4 w-px bg-neutral-200" />
+          <ShapePicker sel={sel} onPick={pickShape} />
+        </div>
+        {q ? (
+          <div className="space-y-1 text-center">
+            <p className="text-base text-neutral-700">
+              <b className="text-neutral-900">{chord.name}</b> — find the{" "}
+              <span className="rounded-md bg-neutral-800 px-1.5 font-bold text-neutral-50">{nameOf(ctx, q.ask)}</span>
+            </p>
+            <p className="h-5 text-sm">
+              {got === null ? (
+                <span className="text-neutral-400">Tap it on the neck.</span>
+              ) : got === q.ask ? (
+                <span className="text-emerald-700">✓ Yes — {reachWords(q.ask)}. Tap anywhere for the next.</span>
+              ) : (
+                <span className="text-rose-700">
+                  That&apos;s the {LOW[got]}. The {nameOf(ctx, q.ask)} is {reachWords(q.ask)}. Tap for the next.
+                </span>
+              )}
+            </p>
+            <div className="flex items-center justify-center gap-3 text-xs text-neutral-500">
+              <Toggle options={POOLS} value={q.pool} onPick={start} />
+              <span className="tabular-nums">{q.right} / {q.asked}</span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-center text-sm text-neutral-600">
+            <b className="text-neutral-900">{chord.name}</b>
+            <span className="mx-1.5 text-neutral-300">=</span>
+            {f.tones.map((t) => (
+              <span key={t.semis} className={`mx-0.5 inline-block min-w-6 rounded-md px-1 tabular-nums ${
+                t === f.aim ? "bg-neutral-800 font-bold text-neutral-50" : "bg-neutral-100"}`}>{t.label}</span>
+            ))}
+            {placed && (
+              <span className="ml-2 text-xs text-neutral-400">
+                from <span className="text-neutral-700">{STRING_SETS.find((x) => x.low === placed.s)?.label} · {shapeOrder(major, placed)}</span>
+              </span>
+            )}
+          </p>
+        )}
       </div>
     );
   },
