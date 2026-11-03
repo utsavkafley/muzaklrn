@@ -5,6 +5,7 @@ import { FretGeo } from "./Fretboard";
 import { audioCtx } from "@/lib/audio";
 import { RiffEvent, RiffNote, moveWindow, steps } from "@/lib/riffs";
 import { Ghost, Reach } from "@/lib/compass";
+import type { Spotlight } from "./practice/types";
 
 const INK = "#18181b";
 const BOARD = "#ffffff";
@@ -37,6 +38,10 @@ interface Props {
   targets?: RiffNote[];
   /** The triad compass: triad notes moved off (ghosts), and each reach from a triad note to an interval. */
   compass?: { ghosts: Ghost[]; reaches: Reach[] };
+  /** The chord after this bar, and its notes in the window: dashed, so what stays and what moves shows. */
+  next?: { name: string; tones: { string: number; fret: number }[] } | null;
+  /** Notes the practice panel is pointing at. */
+  spotlight?: Spotlight | null;
 }
 
 /**
@@ -47,7 +52,9 @@ interface Props {
  * travelling up the string on a slide, and on a bend the string itself
  * bowing as the dot rises and its colour turns into the note it reaches.
  */
-export default function RiffLayer({ geo, notes, lands, events, live, colorOf, outside, numbered = true, targets = [], compass }: Props) {
+export default function RiffLayer({
+  geo, notes, lands, events, live, colorOf, outside, numbered = true, targets = [], compass, next, spotlight,
+}: Props) {
   const [frame, setFrame] = useState<{ now: number; on: RiffEvent[] }>({ now: 0, on: [] });
 
   useEffect(() => {
@@ -68,18 +75,35 @@ export default function RiffLayer({ geo, notes, lands, events, live, colorOf, ou
       {/* Bent strings first, so the map and the moving dots sit on top. */}
       {on.map((e) => <Live key={`s${e.start}-${e.string}`} part="string" geo={geo} e={e} now={frame.now} colorOf={colorOf} />)}
       {compass && <Compass geo={geo} {...compass} />}
+      {/* The next chord, faint and dashed, under this bar's notes. */}
+      {next && !on.length && next.tones
+        .filter((t) => !targets.some((x) => x.string === t.string && x.fret === t.fret))
+        .map((t) => {
+        const p = geo.pos(t.string, t.fret);
+        return (
+          <circle key={`n${t.string}:${t.fret}`} cx={p.x} cy={p.y} r={geo.R + 5} fill="none"
+            stroke={INK} strokeOpacity={0.45} strokeWidth={1.25} strokeDasharray="3 3" />
+        );
+      })}
       <Ghosts geo={geo} notes={notes} lands={lands} faded={on.length > 0} colorOf={colorOf} outside={outside} numbered={numbered} />
       {targets.map((t) => {
         const p = geo.pos(t.string, t.fret);
+        const tag = next ? `→ ${next.name}` : "next";
+        // Above the dot, unless that's off the top of the neck.
+        const ty = p.y - geo.R - 11 < 2 ? p.y + geo.R - 2 : p.y - geo.R - 11;
         return (
           <g key={`t${t.string}:${t.fret}`}>
             <circle cx={p.x} cy={p.y} r={geo.R + 7} fill="none" stroke={INK} strokeWidth={2} strokeDasharray="4 3" />
-            <text x={p.x} y={p.y + geo.R + 19} fontSize={9} fontWeight={700} textAnchor="middle" fill={INK}
-              stroke="#fff" strokeWidth={3} paintOrder="stroke">next</text>
+            {/* Tagged beside the dot, so it never covers the note below. */}
+            <rect x={p.x + geo.R * 0.55} y={ty} width={tag.length * 5.6 + 8} height={13} rx={6.5}
+              fill="#fff" stroke={INK} strokeWidth={1} />
+            <text x={p.x + geo.R * 0.55 + (tag.length * 5.6 + 8) / 2} y={ty + 9.5} fontSize={9} fontWeight={700}
+              textAnchor="middle" fill={INK}>{tag}</text>
           </g>
         );
       })}
       {on.map((e) => <Live key={`d${e.start}-${e.string}`} part="dot" geo={geo} e={e} now={frame.now} colorOf={colorOf} />)}
+      {spotlight && <Spot geo={geo} {...spotlight} />}
     </g>
   );
 }
@@ -122,6 +146,23 @@ function Compass({ geo, ghosts, reaches }: { geo: FretGeo; ghosts: Ghost[]; reac
           </g>
         );
       })}
+    </g>
+  );
+}
+
+/** Notes named in the panel, found on the neck: a pulsing ring, and a dashed one on the triad note they're reached from. */
+function Spot({ geo, at, from }: { geo: FretGeo } & Spotlight) {
+  const AMBER = "#f59e0b";
+  return (
+    <g>
+      {from && !at.some((x) => x.string === from.string && x.fret === from.fret) && (
+        <circle {...xy(geo.pos(from.string, from.fret))} r={geo.R + 6} fill="none" stroke={AMBER} strokeWidth={2} strokeDasharray="3 2" />
+      )}
+      {at.map((x) => (
+        <circle key={`${x.string}:${x.fret}`} {...xy(geo.pos(x.string, x.fret))} r={geo.R + 6} fill="none" stroke={AMBER} strokeWidth={3}>
+          <animate attributeName="r" values={`${geo.R + 5};${geo.R + 10};${geo.R + 5}`} dur="1.1s" repeatCount="indefinite" />
+        </circle>
+      ))}
     </g>
   );
 }

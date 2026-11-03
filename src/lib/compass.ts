@@ -11,7 +11,7 @@
 // 9, 11 and 13 are the 2, 4 and 6 an octave up — the same spots.
 
 import { DiatonicChord } from "./harmony";
-import { ANY_STRINGS, NEAREST, Placed, Segment, placeShapes } from "./lines";
+import { ANY_STRINGS, NEAREST, Placed, SPAN, Segment, placeShapes } from "./lines";
 import { RiffNote } from "./riffs";
 import { pitchAt } from "./theory";
 
@@ -130,13 +130,13 @@ export interface CompassBar {
  */
 export function compassLines(
   chords: DiatonicChord[][], keyPc: number, scale: number[], lo: number, dress: Dress,
-  low = ANY_STRINGS, bottom = NEAREST,
+  low = ANY_STRINGS, bottom = NEAREST, span = SPAN,
 ): CompassBar[] {
   const majors: Segment[][] = chords.map((cs) => cs.map((c) => {
     const r = (keyPc + c.semis) % 12;
     return { pcs: [r, (r + 4) % 12, (r + 7) % 12] };
   }));
-  const shapes = placeShapes(majors, low, lo, bottom);
+  const shapes = placeShapes(majors, low, lo, bottom, span);
   return chords.map((cs, b) => {
     const span = 8 / Math.max(cs.length, 1);
     const bar: CompassBar = { notes: [], ghosts: [], reaches: [], shapes: shapes[b] };

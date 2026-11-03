@@ -72,3 +72,27 @@ export function presetsFor(id: ModeId): Bar[][] {
   }]);
   return [vamp, ...EXTRA[id].map(bars)];
 }
+
+/**
+ * Bars dragged along the strip: moved (or copied) to just before or after
+ * bar `to.bar`, or onto the end. Dropped on an empty bar they fill it,
+ * and as many empty bars after it as they need. Past `max` bars,
+ * empty bars after the ones placed make room; null if that isn't enough.
+ * Returns the strip and where the placed bars now start.
+ */
+export function placeBars(
+  bars: Bar[], from: number[], to: { bar: number; after: boolean } | "new", copy: boolean, max: number,
+): { bars: Bar[]; start: number } | null {
+  const moving = from.map((i) => bars[i]);
+  const into = to !== "new" && !bars[to.bar].length;
+  const at = to === "new" ? bars.length : to.after && !into ? to.bar + 1 : to.bar;
+  const out = copy ? bars.slice() : bars.filter((_, i) => !from.includes(i));
+  const start = copy ? at : at - from.filter((i) => i < at).length;
+  let fill = 0;
+  while (into && fill < moving.length && out[start + fill] && !out[start + fill].length) fill++;
+  out.splice(start, fill, ...moving);
+  for (let k = out.length - 1; out.length > max && k >= start + moving.length; k--) {
+    if (!out[k].length) out.splice(k, 1);
+  }
+  return out.length > max ? null : { bars: out, start };
+}

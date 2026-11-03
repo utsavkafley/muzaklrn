@@ -37,8 +37,8 @@ export function steps(notes: RiffNote[]): number[] {
   return notes.map((x) => ats.indexOf(x.at) + 1);
 }
 
-/** How many bars a phrase spans. */
-export const barsOf = (notes: RiffNote[]) => Math.max(1, Math.ceil(Math.max(0, ...notes.map((x) => x.at + x.len)) / 8));
+/** How many bars a phrase spans, by where its notes start: a last note may ring across the barline (a push). */
+export const barsOf = (notes: RiffNote[]) => Math.max(1, Math.floor(Math.max(0, ...notes.map((x) => x.at)) / 8) + 1);
 
 /** Lay a bar of riff notes on the audio clock, from `barStart`. */
 export function timeline(notes: RiffNote[], barStart: number, secPerEighth: number): RiffEvent[] {

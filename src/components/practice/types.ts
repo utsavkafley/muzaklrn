@@ -32,6 +32,12 @@ export interface Phrase {
   compassFor?: (idx: number) => { ghosts: Ghost[]; reaches: Reach[] };
 }
 
+/** Notes picked out on the neck from the panel, and the triad note each was reached from. */
+export interface Spotlight {
+  at: { string: number; fret: number }[];
+  from?: { string: number; fret: number };
+}
+
 export interface PracticeCtx {
   note: NoteName;
   name: string;
@@ -47,8 +53,13 @@ export interface PracticeCtx {
   progression: DiatonicChord[][];
   /** Which of the progression's chord bars is on the neck (0 with none). */
   bar: number;
-  /** The hand position: frets lo to lo + 4. */
+  /** The hand window: frets lo to lo + span - 1. */
   lo: number;
+  span: number;
+  /** Light up spots on the neck (a note named in the panel), or clear them. */
+  spot: (s: Spotlight | null) => void;
+  /** The neck note under the pointer, if any. */
+  hovered: { string: number; fret: number } | null;
   fillFor: (string: number, fret: number) => string;
   preview: (p: Phrase | null) => void;
 }

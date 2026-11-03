@@ -14,7 +14,7 @@ import {
   ChordKind, ChordRef, DiatonicChord, INTERVALS, KINDS, MOOD_FILL, MOOD_TINT, Mood,
   buildOrTriad, diatonicChords, noteMood, scaleOf, spelled, variantsOf, voicing,
 } from "@/lib/harmony";
-import { Bar, presetsFor } from "@/lib/progressions";
+import { Bar, placeBars, presetsFor } from "@/lib/progressions";
 import { fretTip } from "@/lib/fretTips";
 import {
   SavedProgression, deleteProgression, saveProgression, savedServerSnapshot, savedSnapshot, subscribeSaved,
@@ -24,8 +24,10 @@ import { RiffNote, barsOf } from "@/lib/riffs";
 import { barOf, usePhrasePlayer } from "@/lib/usePhrasePlayer";
 import Practice from "@/components/practice/Practice";
 import { STEPS } from "@/components/practice/steps";
-import { Phrase, PracticeCtx } from "@/components/practice/types";
+import { Phrase, PracticeCtx, Spotlight } from "@/components/practice/types";
 import { homeFret } from "@/lib/shapes";
+import { SPAN, windowFrets } from "@/lib/lines";
+import { formulaOf } from "@/lib/compass";
 
 const MAX_FRET = 15;
 const COUNT_OFF = 4;
@@ -41,6 +43,8 @@ const MODE_MOODS = Object.fromEntries(
 );
 
 const INK = "#18181b";
+/** A note's name counted from a chord it isn't in: a passing note, so a ♭6 rather than a ♯5. */
+const AROUND = ["1", "♭2", "2", "♭3", "3", "4", "♭5", "5", "♭6", "6", "♭7", "7"];
 
 /** Strum a chord low to high, returning every voice so a stop can cut it. */
 function strum(midis: number[], when: number, vol = 0.24): Voice[] {
@@ -73,6 +77,10 @@ export default function Page() {
   const [yourTurn, setYourTurn] = useState(false);
   /** The hand position, in frets from the key's home position. */
   const [shift, setShift] = useState(0);
+  /** How many frets the hand window spans: one position, or several dragged together. */
+  const [span, setSpan] = useState(SPAN);
+  /** Notes the practice panel is pointing at on the neck. */
+  const [spotlight, setSpotlight] = useState<Spotlight | null>(null);
 
   // ---- progression ----
   // Bars hold degrees and kinds, not chords, so a progression follows the key
@@ -160,6 +168,29 @@ export default function Page() {
     const next = bars.map((b, k) => (k === bar ? b.filter((_, h) => h !== half) : b));
     setBars(next);
     if (!next[bar].length) setTarget(bar);
+  };
+
+  /**
+   * Drag bars along the strip: to a gap between bars, onto an empty bar
+   * (filling it), or onto "+ bar". Copying leaves the originals where they
+   * were — build a verse, then copy it into a chorus.
+   */
+  const moveBars = (from: number[], spot: DropSpot, copy: boolean): number | null => {
+    const placed = placeBars(bars, from, spot.bar === "new" ? "new" : { bar: spot.bar, after: spot.side === "right" }, copy, MAX_BARS);
+    if (!placed) return null;
+    setBars(placed.bars);
+    setViewBar(placed.start);
+    setTarget(nextEmpty(placed.bars, placed.bars.length - 1));
+    return placed.start;
+  };
+
+  /** Take whole bars out, leaving one empty bar at least. */
+  const deleteBars = (which: number[]) => {
+    const next = bars.filter((_, i) => !which.includes(i));
+    const left = next.length ? next : [[]];
+    setBars(left);
+    setViewBar(null);
+    setTarget(nextEmpty(left, left.length - 1));
   };
 
   /** Holding a bar changes its chord, in the key or out of it. */
@@ -382,7 +413,7 @@ export default function Page() {
 
   // The hand position: five frets, starting a fret below the key's root on
   // the low E string unless moved.
-  const lo = note ? Math.max(0, Math.min(11, homeFret(noteIndex(note)) - 1 + shift)) : 0;
+  const lo = note ? Math.max(0, Math.min(MAX_FRET + 1 - span, homeFret(noteIndex(note)) - 1 + shift)) : 0;
 
   // What the practice steps see of the page.
   // The bar on show, counted among the bars that hold chords.
@@ -391,7 +422,7 @@ export default function Page() {
     ? {
       note, name, keyPc: noteIndex(note), scale, shown, mode, kind, chordOf, focus: chord,
       progression: bars.filter((b) => b.length).map((b) => b.map(chordOf)),
-      bar: showIdx, lo, fillFor: gripFill, preview,
+      bar: showIdx, lo, span, fillFor: gripFill, preview, spot: setSpotlight, hovered: hover,
     }
     : null;
   const practiceStep = STEPS.find((x) => x.id === step) ?? STEPS[0];
@@ -402,7 +433,22 @@ export default function Page() {
   const hitsByPart = Array.from({ length: phraseBars }, (_, k) =>
     phraseNotes.filter((x) => x.at >= k * 8 && x.at < k * 8 + 8).map((x) => x.at - k * 8));
   // A bare phrase (the drill) hides the key's own dots: they'd give the answer away.
-  const dots: FbNote[] = note && name && !phrase?.bare ? neckDots(note, name, shown, homeTones, chord, hoverPc, !!phrase) : [];
+  const box = practiceCtx ? { lo, span } : null;
+  const dots: FbNote[] = note && name && !phrase?.bare
+    ? neckDots(note, name, shown, homeTones, chord, hoverPc, !!phrase, box, chord && scale ? formulaOf(chord, scale, "chord") : null)
+    : [];
+  // The chord after the bar on show, and where its notes sit in the window:
+  // drawn dashed, so you can see what stays, what moves, and where to go.
+  const chordBars = practiceCtx?.progression ?? [];
+  const nextUp = phrase && !phrase.bare && chordBars.length > 1 && shownBar >= 0
+    ? chordBars[(showIdx + 1) % chordBars.length][0] : null;
+  const nextChord = nextUp && note
+    ? {
+      name: nextUp.name,
+      tones: Array.from({ length: 6 }, (_, s) => windowFrets(lo, span).map((f) => ({ string: s, fret: f }))).flat()
+        .filter((x) => nextUp.tones.includes((pitchAt(x.string, x.fret) - noteIndex(note) + 12) % 12)),
+    }
+    : null;
 
   useEffect(() => {
     phraseCfg.current = { phrase, yourTurn };
@@ -411,11 +457,12 @@ export default function Page() {
   const overlay = practiceCtx
     ? (geo: FretGeo) => (
       <>
-        <HandFrame geo={geo} lo={lo} />
+        <HandFrame geo={geo} lo={lo} span={span} />
         {phrase && (
           <RiffLayer geo={geo} notes={phraseNotes} lands={phrase.lands} events={player.events}
             live={running || player.previewing} colorOf={phraseFill} outside={outsideLabel}
-            numbered={phrase.numbered !== false} targets={targets} compass={phrase.compassFor?.(showIdx)} />
+            numbered={phrase.numbered !== false} targets={targets} compass={phrase.compassFor?.(showIdx)}
+            next={nextChord} spotlight={spotlight} />
         )}
       </>
     )
@@ -431,7 +478,10 @@ export default function Page() {
     }
     : undefined;
   const underlay = practiceCtx
-    ? (geo: FretGeo) => <HandBoard geo={geo} lo={lo} maxLo={11} onLo={(n) => setShift(n - home)} onTap={tapStep} />
+    ? (geo: FretGeo) => (
+      <HandBoard geo={geo} lo={lo} span={span} onTap={tapStep}
+        onWindow={(n, w) => { setShift(n - home); setSpan(w); }} />
+    )
     : undefined;
 
   return (
@@ -486,22 +536,39 @@ export default function Page() {
         {/* Modes, brightest to darkest. Picking one sets the chips; picking it
             again clears them. */}
         <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
-          {MODES.map((m) => {
+          {MODES.map((m, i) => {
             const on = mode?.id === m.id;
             return (
-              <button key={m.id} aria-pressed={on} title={m.alias}
-                onClick={() => setShown(on ? [] : m.intervals.slice(1))}
-                className={`flex flex-col items-center gap-1 border-b-2 pb-1 text-sm transition-colors ${
-                  on ? "border-amber-500 text-neutral-900" : "border-transparent text-neutral-500 hover:text-neutral-800"
-                }`}>
-                {m.name}
-                {/* The mood of each of its seven chords, I to vii. */}
-                <span aria-hidden className="flex gap-0.5">
-                  {MODE_MOODS[m.id].map((md, i) => (
-                    <span key={i} className="h-1.5 w-1.5 rounded-full" style={{ background: MOOD_FILL[md] }} />
-                  ))}
-                </span>
-              </button>
+              <div key={m.id} className="group relative">
+                <button aria-pressed={on} aria-describedby={`vibe-${m.id}`}
+                  onClick={() => setShown(on ? [] : m.intervals.slice(1))}
+                  className={`flex flex-col items-center gap-1 border-b-2 pb-1 text-sm transition-colors ${
+                    on ? "border-amber-500 text-neutral-900" : "border-transparent text-neutral-500 hover:text-neutral-800"
+                  }`}>
+                  {m.name}
+                  {/* The mood of each of its seven chords, I to vii. */}
+                  <span aria-hidden className="flex gap-0.5">
+                    {MODE_MOODS[m.id].map((md, k) => (
+                      <span key={k} className="h-1.5 w-1.5 rounded-full" style={{ background: MOOD_FILL[md] }} />
+                    ))}
+                  </span>
+                </button>
+                {/* Its feel, on hover: what it sounds like, and where you've heard it. */}
+                <div id={`vibe-${m.id}`} role="tooltip"
+                  className={`pointer-events-none absolute top-full z-30 hidden pt-2 opacity-0 transition-opacity delay-150 group-hover:opacity-100 [@media(hover:hover)]:block ${
+                    i < 2 ? "left-0" : i > 4 ? "right-0" : "left-1/2 -translate-x-1/2"}`}>
+                  <div className="w-72 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-left text-sm shadow-lg">
+                    <p className="font-bold text-neutral-900">
+                      {m.name}{m.alias && <span className="font-normal text-neutral-400"> · {m.alias}</span>}
+                    </p>
+                    <p className="mt-0.5 text-neutral-800">{m.vibe}</p>
+                    <p className="mt-1.5 text-xs leading-snug text-neutral-500">{m.tidbit}</p>
+                    <p className="mt-2 text-xs text-neutral-500">
+                      Its sound: the <b className="rounded bg-neutral-800 px-1 text-neutral-50">{m.character}</b>
+                    </p>
+                  </div>
+                </div>
+              </div>
             );
           })}
         </div>
@@ -621,11 +688,11 @@ export default function Page() {
                     tonic
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span aria-hidden className="h-2.5 w-2.5 rounded-full border border-neutral-400" />
+                    <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-neutral-200" />
                     in key
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span aria-hidden className="h-2 w-2 rotate-45 border border-neutral-500" />
+                    <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-neutral-500" />
                     in chord
                   </span>
                 </div>
@@ -667,6 +734,8 @@ export default function Page() {
                   onTapBar={tapBar}
                   onAddBar={addBar}
                   onClear={clearStrip}
+                  onMove={moveBars}
+                  onDelete={deleteBars}
                 />
 
                 {/* Save the progression to come back to; saved ones load
@@ -685,7 +754,8 @@ export default function Page() {
                   }} />)}
                 </div>
                 <p className="-mt-2 text-center text-xs text-neutral-400">
-                  Hover a chord for fingerings · hold a bar to change its chord · space plays and pauses
+                  Hover a chord for fingerings · hold a bar to change its chord · drag bars to move them, shift-drag to copy,
+                  ⌘-click to pick several · space plays and pauses
                 </p>
 
               </div>
@@ -717,33 +787,43 @@ function nextEmpty(bars: Bar[], from: number): number | null {
 
 /**
  * The key's root and every interval switched on, each coloured by its own
- * mood. With a chord in play the chord's notes stand out as diamonds over
+ * mood. With a chord in play the chord's notes keep their full colour over
  * the paled key, its root ringed. The tonic is the one fixed point: always a
  * black circle.
  *
- * While a practice step is showing its notes, the neck steps back: the key
- * is faint, unlabelled dots — the map — and only the step's own notes,
- * drawn over it, are named.
+ * Inside the hand window the notes are counted from the chord instead of
+ * the key — 1 3 5 ♭7, and the 9s and 11s between them — so the arpeggio
+ * and the triads read straight off the board. Outside it the key keeps its
+ * own numbers. While a practice step is showing its notes, the neck steps
+ * back: everything stays named, but faint, so the step's own notes lead.
  */
 function neckDots(
   key: NoteName, keyName: string, shown: number[], homeTones: number[], chord: DiatonicChord | null,
-  hoverPc: number | null, quiet: boolean,
+  hoverPc: number | null, quiet: boolean, box: { lo: number; span: number } | null,
+  formula: { tones: { semis: number; label: string }[] } | null,
 ): FbNote[] {
   const on = shown.map((s) => spelled(s, shown));
   const semis = [0, ...on.map((iv) => iv.semis)];
   const labels = [keyName, ...on.map((iv) => iv.label)];
+  const inBox = (f: number) => !!box && ((f >= box.lo && f < box.lo + box.span) || (f === 0 && box.lo <= 1));
   return fretNotesFor(key, semis, labels, MAX_FRET).map((n) => {
     const iv = (n.pc - noteIndex(key) + 12) % 12;
     const mood = noteMood(iv, homeTones);
+    const inside = inBox(n.fret);
+    const ofChord = chord ? (iv - chord.semis + 12) % 12 : null;
+    const label = inside && ofChord !== null
+      ? formula?.tones.find((t) => t.semis === ofChord)?.label ?? AROUND[ofChord]
+      : n.degree;
     // Every copy of the note being looked at is ringed: that's the map.
-    const base = { string: n.string, fret: n.fret, label: n.degree, halo: n.pc === hoverPc };
-    if (quiet) return { ...base, label: "", fill: iv === 0 ? INK : MOOD_TINT[mood], dim: true };
+    const base = { string: n.string, fret: n.fret, label, halo: n.pc === hoverPc };
+    const tone = !!chord && chord.tones.includes(iv);
+    const fade = quiet ? (inside ? (tone ? 0.75 : 0.45) : 0.32) : inside || !box ? 1 : 0.6;
     if (iv === 0) {
-      return { ...base, fill: INK, ring: chord?.tones.includes(0) ? MOOD_FILL.home : undefined };
+      return { ...base, fill: INK, fade, ring: chord?.tones.includes(0) ? MOOD_FILL.home : undefined };
     }
-    if (!chord) return { ...base, fill: MOOD_FILL[mood] };
-    if (!chord.tones.includes(iv)) return { ...base, fill: MOOD_TINT[mood] };
-    return { ...base, fill: MOOD_FILL[mood], shape: "diamond" as const, ring: iv === chord.semis ? INK : undefined };
+    if (!chord) return { ...base, fill: MOOD_FILL[mood], fade };
+    if (!tone) return { ...base, fill: MOOD_TINT[mood], fade };
+    return { ...base, fill: MOOD_FILL[mood], fade, ring: iv === chord.semis ? INK : undefined };
   });
 }
 

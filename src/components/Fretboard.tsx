@@ -10,9 +10,11 @@ export interface FbNote {
   fill: string; // css color
   ring?: string; // optional outline color (pivot/chord-tone emphasis)
   dim?: boolean;
+  /** How strongly the dot shows, 0 to 1; overrides `dim`. */
+  fade?: number;
   /** Diamond marks a note as part of something played over the scale, e.g. a chord. */
   shape?: "circle" | "diamond";
-  /** A dashed outer ring: "this same note, elsewhere on the neck". */
+  /** A shaded disc behind it: "this same note, elsewhere on the neck". */
   halo?: boolean;
 }
 
@@ -193,16 +195,15 @@ export default function Fretboard({
             <g
               key={`${n.string}-${n.fret}-${i}`}
               className="cursor-pointer"
-              opacity={n.dim ? 0.28 : 1}
+              opacity={n.fade ?? (n.dim ? 0.28 : 1)}
               onMouseEnter={() => onNoteHover?.(n)}
               onClick={() => {
                 if (playOnClick) pluck(midiAt(n.string, n.fret));
                 onNoteClick?.(n);
               }}
             >
-              {n.halo && (
-                <circle cx={p.x} cy={p.y} r={R + 5} fill="none" stroke="#18181b" strokeWidth={1.25} strokeDasharray="3 2.5" />
-              )}
+              {/* A soft disc, not a ring: rings belong to what's being played. */}
+              {n.halo && <circle cx={p.x} cy={p.y} r={R + 6} fill="#18181b" fillOpacity={0.14} />}
               {n.shape === "diamond" ? (
                 <path d={diamond(p, R * 1.4)}
                   fill={n.fill} stroke={n.ring ?? "transparent"} strokeWidth={2.5} strokeLinejoin="round" />

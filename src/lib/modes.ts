@@ -44,6 +44,10 @@ export interface Mode {
   relativeMajorDown: number;
   /** A vamp that holds this mode still instead of collapsing to the relative major. */
   vamp: ModeVampChord[];
+  /** What it feels like, in a line. */
+  vibe: string;
+  /** Something worth knowing about it: where you've heard it, or why it works. */
+  tidbit: string;
 }
 
 /**
@@ -64,6 +68,8 @@ export const MODES: Mode[] = [
       { numeral: "Imaj7", semitones: 0, quality: "maj7" },
       { numeral: "II", semitones: 2, quality: "maj" },
     ],
+    vibe: "Dreamy, floating, wide-eyed — major with the floor taken out.",
+    tidbit: "The ♯4 never wants to resolve, so the music hovers. Film composers reach for it for wonder and flight; Satriani's “Flying in a Blue Dream” lives here.",
   },
   {
     id: "ionian",
@@ -79,6 +85,8 @@ export const MODES: Mode[] = [
       { numeral: "Imaj7", semitones: 0, quality: "maj7" },
       { numeral: "IV", semitones: 5, quality: "maj" },
     ],
+    vibe: "Home. Sunny, settled, resolved.",
+    tidbit: "The 7 sits a half step under the root and pulls up into it — that pull is why major-key songs feel like they end. Most nursery rhymes and pop choruses.",
   },
   {
     id: "mixolydian",
@@ -93,6 +101,8 @@ export const MODES: Mode[] = [
       { numeral: "I7", semitones: 0, quality: "7" },
       { numeral: "♭VII", semitones: 10, quality: "maj" },
     ],
+    vibe: "Major with dirt under its nails: bluesy, swaggering, unhurried.",
+    tidbit: "The ♭7 removes the pull home, so it grooves instead of resolving. The I–♭VII–IV of “Sweet Home Alabama” is pure Mixolydian; so is half of classic rock.",
   },
   {
     id: "dorian",
@@ -107,6 +117,8 @@ export const MODES: Mode[] = [
       { numeral: "i7", semitones: 0, quality: "min7" },
       { numeral: "IV", semitones: 5, quality: "maj" },
     ],
+    vibe: "Minor, but hopeful — cool, soulful, a little funky.",
+    tidbit: "The natural 6 lets light into a minor chord, and makes the IV chord major. “Oye Como Va” and Miles Davis's “So What” both sit on a Dorian vamp.",
   },
   {
     id: "aeolian",
@@ -123,6 +135,8 @@ export const MODES: Mode[] = [
       { numeral: "♭VI", semitones: 8, quality: "maj" },
       { numeral: "♭VII", semitones: 10, quality: "maj" },
     ],
+    vibe: "Plain minor: sad, earnest, a bit epic.",
+    tidbit: "The ♭6 sighs down onto the 5. The i–♭VII–♭VI walk of “All Along the Watchtower” is Aeolian, and it's the default minor of rock and pop.",
   },
   {
     id: "phrygian",
@@ -137,6 +151,8 @@ export const MODES: Mode[] = [
       { numeral: "i", semitones: 0, quality: "min" },
       { numeral: "♭II", semitones: 1, quality: "maj" },
     ],
+    vibe: "Dark, tense and exotic — Spanish heat or metal menace.",
+    tidbit: "The ♭2 a half step above the root is the whole sound: lean on it over the i chord. Flamenco and a lot of thrash riffs live on that half step.",
   },
   {
     id: "locrian",
@@ -152,6 +168,8 @@ export const MODES: Mode[] = [
       { numeral: "im7♭5", semitones: 0, quality: "m7b5" },
       { numeral: "♭II", semitones: 1, quality: "maj" },
     ],
+    vibe: "Unstable and uneasy — a floor that isn't there.",
+    tidbit: "No perfect 5th, so its own home chord is diminished and never sounds finished. Rare as a home; Björk's “Army of Me” is the usual example.",
   },
 ];
 
