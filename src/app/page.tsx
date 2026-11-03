@@ -23,6 +23,7 @@ import { DropSpot, useChordDrag } from "@/lib/useChordDrag";
 import { RiffNote, barsOf } from "@/lib/riffs";
 import { barOf, usePhrasePlayer } from "@/lib/usePhrasePlayer";
 import Practice from "@/components/practice/Practice";
+import Drills from "@/components/Drills";
 import { STEPS } from "@/components/practice/steps";
 import { Phrase, PracticeCtx, Spotlight } from "@/components/practice/types";
 import { homeFret } from "@/lib/shapes";
@@ -268,6 +269,7 @@ export default function Page() {
   };
 
   const start = () => {
+    drillStop.current?.();
     if (!met.current) met.current = new Metronome();
     const m = met.current;
     m.bpm = bpm;
@@ -329,6 +331,10 @@ export default function Page() {
   // Space plays and pauses, from anywhere on the page. The two boxes never
   // need a space (a note name, a tempo), so they don't swallow it either.
   const playPause = useRef<() => void>(() => {});
+  /** Set while the practice drills are on screen: space is theirs then. */
+  const drillSpace = useRef<(() => void) | null>(null);
+  /** Stops the drills' own click, when the progression's starts. */
+  const drillStop = useRef<(() => void) | null>(null);
   useEffect(() => {
     playPause.current = running ? stop : start;
   });
@@ -342,7 +348,7 @@ export default function Page() {
       if (!isSpace(e) || e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
       // Also stops a focused button from treating the space as a click.
       e.preventDefault();
-      if (!e.repeat) playPause.current();
+      if (!e.repeat) (drillSpace.current ?? playPause.current)();
     };
     const up = (e: KeyboardEvent) => {
       if (isSpace(e) && !typing(e.target)) e.preventDefault();
@@ -596,6 +602,10 @@ export default function Page() {
 
         {/* What the neck is showing you to play, right under it. */}
         {practiceCtx && (
+          <>
+          <a href="#practice" className="-mb-3 block text-center text-xs text-neutral-400 hover:text-neutral-700">
+            Drill this frame — tab, picking, meter ↓
+          </a>
           <Practice
             ctx={practiceCtx}
             step={step}
@@ -605,6 +615,7 @@ export default function Page() {
             yourTurn={yourTurn}
             setYourTurn={setYourTurn}
           />
+          </>
         )}
 
         {note && name && (
@@ -763,6 +774,29 @@ export default function Page() {
           </>
         )}
       </div>
+
+      {/* Below the fold: dexterity drills from the key, the mode and the frame
+          chosen above, as tab against their own click. */}
+      {note && name && (
+        <div id="practice" className="w-full">
+          <Drills
+            keyPc={noteIndex(note)}
+            title={`${name} ${mode?.name ?? (shown.length ? "· your notes" : "· root only")}`}
+            scale={[0, ...shown]}
+            lo={lo}
+            span={span}
+            fillFor={gripFill}
+            degreeOf={(pc) => {
+              const iv = (pc - noteIndex(note) + 12) % 12;
+              return iv === 0 ? "1" : spelled(iv, shown).label;
+            }}
+            bpm={bpm}
+            stopRef={drillStop}
+            onStart={() => { if (running) stop(); }}
+            space={drillSpace}
+          />
+        </div>
+      )}
 
       {/* The chord being dragged follows the pointer. */}
       {drag && name && scale && (
