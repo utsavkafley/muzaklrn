@@ -179,6 +179,101 @@ export function pluck(midi: number, when?: number, dur = 0.9, vol = 0.5): Voice 
   };
 }
 
+/** How a fretted note is sounded: picked down or up, hammered on, or pulled off. */
+export type Attack = "D" | "U" | "h" | "p";
+
+/** A second of white noise, made once and reused for every pick's scrape. */
+let noiseBuf: AudioBuffer | null = null;
+function noise(ac: AudioContext) {
+  if (!noiseBuf) {
+    noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  return noiseBuf;
+}
+
+/**
+ * A fretted note, sounded the way the hands sound it. A downstroke is the
+ * brightest and loudest, with the pick's scrape on the front; an upstroke is
+ * a shade lighter and darker. A hammer-on has no pick at all — a softer,
+ * rounder start with a little fret tap under it — and a pull-off is the
+ * finger plucking as it leaves: a small snap, quieter than a pick.
+ * `accent` leans on it, the first note of a beat group.
+ */
+export function fretNote(midi: number, when: number, dur: number, how: Attack, accent = false, vol = 0.32): Voice {
+  const ac = audioCtx();
+  const t = when;
+  const f = midiToFreq(midi);
+  const shape = {
+    D: { level: 1, bright: 7, attack: 0.004, scrape: 0.22 },
+    U: { level: 0.82, bright: 5, attack: 0.005, scrape: 0.13 },
+    h: { level: 0.62, bright: 2.6, attack: 0.018, scrape: 0 },
+    p: { level: 0.7, bright: 3.6, attack: 0.008, scrape: 0 },
+  }[how];
+  const peak = vol * shape.level * (accent ? 1.3 : 1);
+
+  const osc = ac.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.value = f;
+  const osc2 = ac.createOscillator();
+  osc2.type = "sine";
+  osc2.frequency.value = f * 2;
+  const lp = ac.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.setValueAtTime(Math.min(f * shape.bright, 9000), t);
+  lp.frequency.exponentialRampToValueAtTime(Math.max(f * 1.4, 280), t + Math.max(dur, 0.2) * 0.8);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + shape.attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  const g2 = ac.createGain();
+  g2.gain.value = how === "h" ? 0.12 : 0.25;
+  osc.connect(lp);
+  osc2.connect(g2).connect(lp);
+  lp.connect(g).connect(out());
+  osc.start(t); osc2.start(t);
+  osc.stop(t + dur + 0.05); osc2.stop(t + dur + 0.05);
+
+  // The front of the note: a pick's scrape, a hammer's tap on the fret, or a pull-off's snap.
+  const src = ac.createBufferSource();
+  src.buffer = noise(ac);
+  const band = ac.createBiquadFilter();
+  const ng = ac.createGain();
+  if (how === "h") {
+    band.type = "lowpass";
+    band.frequency.value = 900;
+    ng.gain.setValueAtTime(peak * 0.5, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.012);
+  } else if (how === "p") {
+    band.type = "bandpass";
+    band.frequency.value = Math.min(f * 3, 6000);
+    band.Q.value = 2;
+    ng.gain.setValueAtTime(peak * 0.35, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.015);
+  } else {
+    band.type = "highpass";
+    band.frequency.value = how === "D" ? 2500 : 3500;
+    ng.gain.setValueAtTime(peak * shape.scrape, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
+  }
+  src.connect(band).connect(ng).connect(out());
+  src.start(t, Math.random() * 0.5);
+  src.stop(t + 0.03);
+
+  return {
+    stop(when?: number) {
+      const at = Math.max(when ?? ac.currentTime, ac.currentTime);
+      try {
+        fadeOut(g, at, t, 0.015);
+        osc.stop(at + 0.03); osc2.stop(at + 0.03);
+      } catch {
+        /* already stopped */
+      }
+    },
+  };
+}
+
 /** A pitch change partway through a riff note. */
 export interface Glide {
   /** AudioContext time the change starts. */

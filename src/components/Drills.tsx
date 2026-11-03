@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Fretboard, { FbNote } from "./Fretboard";
 import { HandFrame } from "./HandWindow";
-import { Metronome, Voice, audioCtx, click, pluck, sticks } from "@/lib/audio";
+import { Metronome, Voice, audioCtx, click, fretNote, sticks } from "@/lib/audio";
 import {
   Direction, Drill, DrillSettings, Layout, METERS, Picking, Sequence, accents, buildDrill, countAt, subsFor,
 } from "@/lib/drills";
@@ -52,9 +52,9 @@ const DIRECTIONS: { value: Direction; label: string }[] = [
   { value: "updown", label: "up & down" },
 ];
 const PICKINGS: { value: Picking; label: string; tip: string }[] = [
-  { value: "alternate", label: "alternate", tip: "Strict down-up, even across strings: the steadiest time." },
-  { value: "economy", label: "economy", tip: "Alternate on a string, then sweep onto the next in the direction the pick is already moving." },
-  { value: "legato", label: "legato", tip: "Pick the first note on each string; hammer on and pull off the rest. The fretting hand does the work." },
+  { value: "alternate", label: "alternate", tip: "Strict down-up, even across strings: the steadiest time. Listen: downstrokes come out a little brighter and louder than upstrokes — make them match." },
+  { value: "economy", label: "economy", tip: "Alternate on a string, then sweep onto the next in the direction the pick is already moving. Listen: two strokes the same way in a row at each string change — the sweep should sound as even as the rest." },
+  { value: "legato", label: "legato", tip: "Pick the first note on each string; hammer on and pull off the rest. The fretting hand does the work. Listen: only the first note on a string has a pick attack — the rest are softer and rounder and run into each other, so hammer hard enough to keep them level." },
 ];
 const SUB_NAMES: Record<string, string> = { "4-1": "♩", "4-2": "♫ 8ths", "4-3": "triplets", "4-4": "16ths", "8-1": "♪", "8-2": "16ths" };
 const BUMPS = [0, 2, 5];
@@ -125,6 +125,8 @@ export default function Drills({ keyPc, title, scale, lo, span, fillFor, degreeO
   const [loops, setLoops] = useState(0);
   const met = useRef<Metronome | null>(null);
   const voices = useRef<Voice[]>([]);
+  /** The note sounding on each string. */
+  const ringing = useRef<Record<number, Voice>>({});
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   /** What the tick callback plays, kept current while it runs. */
   const now = useRef({ drill, settings, sound, bump });
@@ -136,6 +138,7 @@ export default function Drills({ keyPc, title, scale, lo, span, fillFor, degreeO
     met.current?.stop();
     voices.current.forEach((v) => v.stop());
     voices.current = [];
+    ringing.current = {};
     timers.current.forEach(clearTimeout);
     timers.current = [];
     setPlaying(false);
@@ -165,7 +168,17 @@ export default function Drills({ keyPc, title, scale, lo, span, fillFor, degreeO
       if (!countIn && d.notes.length) {
         slot = (t.count - d.perBar) % d.notes.length;
         const n = d.notes[slot];
-        if (snd) voices.current.push(pluck(midiAt(n.string, n.fret), t.when, Math.min(0.6, 60 / m.bpm / s.subs * 1.6), 0.32));
+        if (snd) {
+          // One note a string, as under a fretting hand: a new one cuts the last.
+          ringing.current[n.string]?.stop(t.when);
+          const slurred = n.stroke === "h" || n.stroke === "p";
+          const gap = 60 / m.bpm / s.subs;
+          // Picked notes are short and separate; slurred ones ring on into the next.
+          const v = fretNote(midiAt(n.string, n.fret), t.when, Math.min(slurred ? 1.2 : 0.6, gap * (slurred ? 3 : 1.6)),
+            n.stroke, t.sub % s.subs === 0 && accents(s.meter).includes(beat));
+          voices.current.push(v);
+          ringing.current[n.string] = v;
+        }
         // Each time round, a little faster.
         if (slot === 0 && t.count > d.perBar) {
           if (b) m.bpm = clampBpm(m.bpm + b);
@@ -233,6 +246,7 @@ export default function Drills({ keyPc, title, scale, lo, span, fillFor, degreeO
   const tips = [
     LAYOUTS.find((l) => l.value === settings.layout)?.tip,
     PICKINGS.find((p) => p.value === settings.picking)?.tip,
+    settings.meter.groups.length > 1 ? `${settings.meter.id} groups as ${settings.meter.groups.join("+")}: the bold counts are accented, in the click and in the note.` : null,
   ];
 
   return (
